@@ -1,0 +1,58 @@
+{
+  "displayName": "Morning Routine",
+  "description": "Common morning activities for any day",
+  "activities": [
+    {
+      "id": "act-1",
+      "title": "1st Things/Office Time",
+      "start": "07:00",
+      "end": "08:00",
+      "people": [
+        "Jason",
+        "Kay"
+      ],
+      "type": "routine",
+      "color": "#c8e6c9",
+      "notes": "Peaceful music, personal morning routine"
+    },
+    {
+      "id": "act-2",
+      "title": "Kids Breakfast & AM Meeting",
+      "start": "08:00",
+      "end": "08:30",
+      "people": [
+        "Jason",
+        "Kay",
+        "Emma",
+        "Toby"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": "Family breakfast, daily meeting"
+    },
+    {
+      "id": "act-3",
+      "title": "Lift/Shower",
+      "start": "08:30",
+      "end": "09:15",
+      "people": [
+        "Jason"
+      ],
+      "type": "personal",
+      "color": "#bbdefb",
+      "notes": ""
+    },
+    {
+      "id": "act-4",
+      "title": "Shower/Laundry",
+      "start": "08:30",
+      "end": "09:15",
+      "people": [
+        "Kay"
+      ],
+      "type": "personal",
+      "color": "#f8bbd0",
+      "notes": ""
+    }
+  ]
+}

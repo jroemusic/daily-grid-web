@@ -1,0 +1,565 @@
+{
+  "displayName": "School Day (Wednesday)",
+  "description": "Imported from Wednesday_Template.csv",
+  "activities": [
+    {
+      "id": "act-0",
+      "title": "Start Peaceful Music/Office",
+      "start": "07:00",
+      "end": "08:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "work",
+      "color": "#d1c4e9",
+      "notes": ""
+    },
+    {
+      "id": "act-1",
+      "title": "Free Time/1st Things",
+      "start": "07:00",
+      "end": "08:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-2",
+      "title": "Free Time/Chores",
+      "start": "07:00",
+      "end": "08:00",
+      "people": [
+        "Emma"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-3",
+      "title": "No Fight Love Time/Chores",
+      "start": "07:00",
+      "end": "08:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-4",
+      "title": "Kids' Bfast/AM Mtg/Squip",
+      "start": "08:00",
+      "end": "09:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-5",
+      "title": "1st Things/AM Mtg/Kids' Timers",
+      "start": "08:00",
+      "end": "09:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "routine",
+      "color": "#c8e6c9",
+      "notes": ""
+    },
+    {
+      "id": "act-6",
+      "title": "Bfast/AM Timers",
+      "start": "08:00",
+      "end": "09:00",
+      "people": [
+        "Emma",
+        "Toby"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-7",
+      "title": "Shower/Prep/9:40 LEAVE",
+      "start": "09:00",
+      "end": "10:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "personal",
+      "color": "#bbdefb",
+      "notes": ""
+    },
+    {
+      "id": "act-8",
+      "title": "Shower/Laundry",
+      "start": "09:00",
+      "end": "10:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "personal",
+      "color": "#bbdefb",
+      "notes": ""
+    },
+    {
+      "id": "act-9",
+      "title": "Journal/1 Book Chap.",
+      "start": "09:00",
+      "end": "10:00",
+      "people": [
+        "Emma"
+      ],
+      "type": "school",
+      "color": "#b2dfdb",
+      "notes": ""
+    },
+    {
+      "id": "act-10",
+      "title": "Worksheet/Piano",
+      "start": "09:00",
+      "end": "10:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "work",
+      "color": "#d1c4e9",
+      "notes": ""
+    },
+    {
+      "id": "act-11",
+      "title": "Alyssa Lessons",
+      "start": "10:00",
+      "end": "11:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-12",
+      "title": "Toby Time 10m/E School",
+      "start": "10:00",
+      "end": "11:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "school",
+      "color": "#b2dfdb",
+      "notes": ""
+    },
+    {
+      "id": "act-13",
+      "title": "Break 10m/Binder Block",
+      "start": "10:00",
+      "end": "11:00",
+      "people": [
+        "Emma"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-14",
+      "title": "Kay Time 10m/Home Org. Cap.",
+      "start": "10:00",
+      "end": "11:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-15",
+      "title": "Drive Home/Brunch",
+      "start": "11:00",
+      "end": "12:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-16",
+      "title": "Brunch",
+      "start": "11:00",
+      "end": "12:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-17",
+      "title": "Lunch",
+      "start": "11:00",
+      "end": "12:00",
+      "people": [
+        "Emma",
+        "Toby"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-18",
+      "title": "Reading/Quiet Meditation Time",
+      "start": "12:00",
+      "end": "13:00",
+      "people": [
+        "Jason",
+        "Kay",
+        "Emma",
+        "Toby"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-19",
+      "title": "Family Walk",
+      "start": "13:00",
+      "end": "14:00",
+      "people": [
+        "Jason",
+        "Kay",
+        "Emma",
+        "Toby"
+      ],
+      "type": "family",
+      "color": "#ffe0b2",
+      "notes": ""
+    },
+    {
+      "id": "act-20",
+      "title": "Work Together",
+      "start": "14:00",
+      "end": "15:00",
+      "people": [
+        "Jason",
+        "Kay"
+      ],
+      "type": "work",
+      "color": "#d1c4e9",
+      "notes": ""
+    },
+    {
+      "id": "act-21",
+      "title": "Spin It!",
+      "start": "14:00",
+      "end": "15:00",
+      "people": [
+        "Emma",
+        "Toby"
+      ],
+      "type": "activity",
+      "color": "#f8bbd0",
+      "notes": ""
+    },
+    {
+      "id": "act-22",
+      "title": "Kids/VR/Games",
+      "start": "15:00",
+      "end": "16:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "activity",
+      "color": "#f8bbd0",
+      "notes": ""
+    },
+    {
+      "id": "act-23",
+      "title": "Sbux Time",
+      "start": "15:00",
+      "end": "16:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-24",
+      "title": "VR/Games",
+      "start": "15:00",
+      "end": "16:00",
+      "people": [
+        "Emma",
+        "Toby"
+      ],
+      "type": "activity",
+      "color": "#f8bbd0",
+      "notes": ""
+    },
+    {
+      "id": "act-25",
+      "title": "Kids/Misc.",
+      "start": "16:00",
+      "end": "17:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-26",
+      "title": "Sbux Time",
+      "start": "16:00",
+      "end": "17:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-27",
+      "title": "Craft/Project",
+      "start": "16:00",
+      "end": "17:00",
+      "people": [
+        "Emma"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-28",
+      "title": "Brain Break",
+      "start": "16:00",
+      "end": "17:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-29",
+      "title": "10m Tidy/Kids Dinner/PM Mtg.",
+      "start": "17:00",
+      "end": "18:00",
+      "people": [
+        "Jason",
+        "Kay"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-30",
+      "title": "10m Tidy/Dinner",
+      "start": "17:00",
+      "end": "18:00",
+      "people": [
+        "Emma",
+        "Toby"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-31",
+      "title": "Dinner/Office",
+      "start": "18:00",
+      "end": "19:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-32",
+      "title": "Dinner",
+      "start": "18:00",
+      "end": "19:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "meal",
+      "color": "#fff9c4",
+      "notes": ""
+    },
+    {
+      "id": "act-33",
+      "title": "Free Time/Shower",
+      "start": "18:00",
+      "end": "19:00",
+      "people": [
+        "Emma"
+      ],
+      "type": "personal",
+      "color": "#bbdefb",
+      "notes": ""
+    },
+    {
+      "id": "act-34",
+      "title": "Free Time/Bath",
+      "start": "18:00",
+      "end": "19:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-35",
+      "title": "Office Time/Dishes",
+      "start": "19:00",
+      "end": "20:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "work",
+      "color": "#d1c4e9",
+      "notes": ""
+    },
+    {
+      "id": "act-36",
+      "title": "Toby Bedtime",
+      "start": "19:00",
+      "end": "20:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-37",
+      "title": "Free Time",
+      "start": "19:00",
+      "end": "20:00",
+      "people": [
+        "Emma"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-38",
+      "title": "PM Timers",
+      "start": "19:00",
+      "end": "20:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "routine",
+      "color": "#c8e6c9",
+      "notes": ""
+    },
+    {
+      "id": "act-39",
+      "title": "Bathroom/PM Timers",
+      "start": "20:00",
+      "end": "21:00",
+      "people": [
+        "Jason"
+      ],
+      "type": "personal",
+      "color": "#bbdefb",
+      "notes": ""
+    },
+    {
+      "id": "act-40",
+      "title": "PM Timers",
+      "start": "20:00",
+      "end": "21:00",
+      "people": [
+        "Kay",
+        "Emma"
+      ],
+      "type": "routine",
+      "color": "#c8e6c9",
+      "notes": ""
+    },
+    {
+      "id": "act-41",
+      "title": "Sleep",
+      "start": "20:00",
+      "end": "21:00",
+      "people": [
+        "Toby"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-42",
+      "title": "Sleep",
+      "start": "21:00",
+      "end": "22:00",
+      "people": [
+        "Jason",
+        "Emma",
+        "Toby"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    },
+    {
+      "id": "act-43",
+      "title": "Free Time/Sleep",
+      "start": "21:00",
+      "end": "22:00",
+      "people": [
+        "Kay"
+      ],
+      "type": "break",
+      "color": "#f0f0f0",
+      "notes": ""
+    },
+    {
+      "id": "act-44",
+      "title": "Sleep",
+      "start": "22:00",
+      "end": "23:00",
+      "people": [
+        "Jason",
+        "Kay",
+        "Emma",
+        "Toby"
+      ],
+      "type": "other",
+      "color": "#ffffff",
+      "notes": ""
+    }
+  ]
+}
