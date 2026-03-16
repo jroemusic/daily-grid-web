@@ -4,6 +4,17 @@
 import { Schedule, Activity } from './types';
 
 /**
+ * Convert 24-hour time to AM/PM format
+ */
+function formatTime12Hour(time: string): string {
+  const [hours, minutes] = time.split(':');
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
+}
+
+/**
  * Generate a PDF from a schedule
  * Call this from client-side code only
  */
@@ -222,9 +233,11 @@ export function generatePrintableHTML(schedule: Schedule): string {
 
   for (const [timeKey, personActivities] of sortedSlots) {
     const [start, end] = timeKey.split('-');
+    const start12 = formatTime12Hour(start);
+    const end12 = formatTime12Hour(end);
     html += `
             <tr>
-              <td class="time-col">${start} - ${end}</td>
+              <td class="time-col">${start12} - ${end12}</td>
     `;
     for (const person of people) {
       const activity = personActivities.get(person);
