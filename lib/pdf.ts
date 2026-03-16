@@ -15,6 +15,25 @@ function formatTime12Hour(time: string): string {
 }
 
 /**
+ * Format date as "March 16, 2026"
+ */
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  const months = ['January', 'February', 'March', 'April', 'May', 'June',
+                  'July', 'August', 'September', 'October', 'November', 'December'];
+  return `${months[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+}
+
+/**
+ * Get day name from date
+ */
+function getDayName(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[date.getDay()];
+}
+
+/**
  * Generate a PDF from a schedule
  * Call this from client-side code only
  */
@@ -215,8 +234,8 @@ export function generatePrintableHTML(schedule: Schedule): string {
       </head>
       <body>
         <div class="header">
-          <h1>Daily Grid - ${schedule.dayName}</h1>
-          <p class="date">${schedule.date}</p>
+          <h1>Daily Grid - ${getDayName(schedule.date)}</h1>
+          <p class="date">${formatDate(schedule.date)}</p>
         </div>
         <table>
           <thead>
