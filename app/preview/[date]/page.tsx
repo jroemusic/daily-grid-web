@@ -4,7 +4,7 @@ import { useEffect, useState, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Schedule } from '@/lib/types';
-import { downloadPDF } from '@/lib/pdf';
+import { downloadPDF, formatDate, getDayName } from '@/lib/pdf';
 
 export default function PreviewPage({ params }: { params: Promise<{ date: string }> }) {
   const resolvedParams = use(params);
@@ -88,7 +88,7 @@ export default function PreviewPage({ params }: { params: Promise<{ date: string
                 ← Back to Editor
               </Link>
               <h1 className="text-xl font-bold text-gray-900 mt-1">
-                {schedule.date} - {schedule.dayName}
+                {formatDate(schedule.date)} - {getDayName(schedule.date)}
               </h1>
             </div>
             <div className="flex gap-3">
