@@ -9,6 +9,8 @@ export interface Activity {
   type: ActivityType;
   color: string;
   notes?: string;
+  completed?: boolean;
+  completedAt?: string;
 }
 
 export type ActivityType =

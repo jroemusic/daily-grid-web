@@ -16,6 +16,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Daily Grid",
   description: "Family schedule and time blocking",
+  manifest: "/manifest.json",
+  icons: [
+    { rel: "icon", url: "/favicon.ico" },
+    { rel: "apple-touch-icon", url: "/icon-192.png" }
+  ]
 };
 
 export default function RootLayout({

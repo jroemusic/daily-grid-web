@@ -245,11 +245,20 @@ export function generatePrintableHTML(schedule: Schedule): string {
     for (const person of people) {
       const activity = personActivities.get(person);
       if (activity) {
-        const bgColor = activity.color || '#fff';
-        // Check if color is light
-        const isLight = bgColor === '#f0f0f0' || bgColor === '#ffffff' || bgColor === '#fff';
-        const textColor = isLight ? '#333' : '#000';
-        html += `<td style="background: ${bgColor}; color: ${textColor}">${activity.title}</td>`;
+        let bgColor = activity.color || '#fff';
+        let textColor = '#000';
+        let style = '';
+
+        if (activity.completed) {
+          // Grayed out for completed activities
+          style = 'text-decoration: line-through; opacity: 0.5;';
+        } else {
+          // Check if color is light
+          const isLight = bgColor === '#f0f0f0' || bgColor === '#ffffff' || bgColor === '#fff';
+          textColor = isLight ? '#333' : '#000';
+        }
+
+        html += `<td style="background: ${bgColor}; color: ${textColor}; ${style}">${activity.title}</td>`;
       } else {
         html += `<td></td>`;
       }
