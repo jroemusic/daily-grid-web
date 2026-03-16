@@ -15,9 +15,17 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<{name: string, displayName: string}[]>([]);
 
   useEffect(() => {
     loadSchedule();
+    // Load templates
+    fetch('/api/templates')
+      .then(res => res.json())
+      .then(data => {
+        setTemplates((data.templates || []).map((t: any) => ({ name: t.name, displayName: t.display_name })));
+      })
+      .catch(console.error);
   }, [resolvedParams.date]);
 
   async function loadSchedule() {
@@ -164,7 +172,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+        <div className="text-gray-800">Loading...</div>
       </div>
     );
   }
@@ -213,19 +221,19 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Template Loader */}
         <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-900 mb-2">
             Load from Template
           </label>
           <div className="flex gap-3">
             <select
               value={selectedTemplate || ''}
               onChange={(e) => setSelectedTemplate(e.target.value || null)}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2"
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
             >
               <option value="">Select a template...</option>
-              <option value="school-day">School Day</option>
-              <option value="school-day-fri">School Day (Friday)</option>
-              <option value="free-day">Free Day (Weekend)</option>
+              {templates.map((t) => (
+                <option key={t.name} value={t.name}>{t.displayName}</option>
+              ))}
             </select>
             <button
               onClick={() => selectedTemplate && loadTemplate(selectedTemplate)}
@@ -250,7 +258,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
           <div className="divide-y divide-gray-200">
             {schedule.activities.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
+              <div className="p-8 text-center text-gray-900">
                 No activities yet. Add one to get started!
               </div>
             ) : (
@@ -287,46 +295,46 @@ function ActivityEditor({
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         {/* Title */}
         <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-900 mb-1">
             Title
           </label>
           <input
             type="text"
             value={activity.title}
             onChange={(e) => onUpdate({ title: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
           />
         </div>
 
         {/* Start Time */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-900 mb-1">
             Start
           </label>
           <input
             type="time"
             value={activity.start}
             onChange={(e) => onUpdate({ start: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
           />
         </div>
 
         {/* End Time */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-900 mb-1">
             End
           </label>
           <input
             type="time"
             value={activity.end}
             onChange={(e) => onUpdate({ end: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
           />
         </div>
 
         {/* Type */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-900 mb-1">
             Type
           </label>
           <select
@@ -335,7 +343,7 @@ function ActivityEditor({
               type: e.target.value as ActivityType,
               color: ACTIVITY_COLORS[e.target.value as ActivityType]
             })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
           >
             <option value="routine">Routine</option>
             <option value="meal">Meal</option>
@@ -363,7 +371,7 @@ function ActivityEditor({
       {/* People & Notes */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-900 mb-1">
             People (comma separated)
           </label>
           <input
@@ -372,19 +380,19 @@ function ActivityEditor({
             onChange={(e) => onUpdate({
               people: e.target.value.split(',').map(p => p.trim()).filter(Boolean)
             })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
             placeholder="Jason, Kay, Emma, Toby"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
+          <label className="block text-sm font-medium text-gray-900 mb-1">
             Notes
           </label>
           <input
             type="text"
             value={activity.notes || ''}
             onChange={(e) => onUpdate({ notes: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
           />
         </div>
       </div>

@@ -1,26 +1,100 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Background colors */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f4;
+
+  /* Text colors - high contrast for accessibility */
+  --text-primary: #1a1a1a;
+  --text-secondary: #3d3d3d;
+  --text-tertiary: #6b6b6b;
+  --text-muted: #9ca3af;
+
+  /* Accent colors */
+  --accent-primary: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-success: #059669;
+  --accent-danger: #dc2626;
+
+  /* Border & shadow */
+  --border-light: #e5e7eb;
+  --border-medium: #d1d5db;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+
+  /* Card background */
+  --card-bg: #ffffff;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --bg-primary: #0f0f0f;
+    --bg-secondary: #1a1a1a;
+    --bg-tertiary: #262626;
+    --text-primary: #f5f5f5;
+    --text-secondary: #d4d4d4;
+    --text-tertiary: #a3a3a3;
+    --text-muted: #737373;
+    --border-light: #2d2d2d;
+    --border-medium: #404040;
+    --card-bg: #171717;
   }
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.6;
+}
+
+/* Fix input and select text colors globally */
+input, select, textarea {
+  color: var(--text-primary) !important;
+  background-color: var(--card-bg) !important;
+}
+
+input::placeholder, textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Ensure option elements have proper styling in dark mode */
+option {
+  background-color: var(--card-bg);
+  color: var(--text-primary);
+}
+
+/* Custom utility classes for consistent theming */
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-tertiary { color: var(--text-tertiary); }
+.text-muted { color: var(--text-muted); }
+
+.bg-primary { background-color: var(--bg-primary); }
+.bg-secondary { background-color: var(--bg-secondary); }
+.bg-tertiary { background-color: var(--bg-tertiary); }
+
+.border-default { border-color: var(--border-light); }
+.shadow-card { box-shadow: var(--shadow-md); }
+
+/* Smooth transitions */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* Remove transition on page load for initial render */
+.initial-load * {
+  transition: none !important;
 }

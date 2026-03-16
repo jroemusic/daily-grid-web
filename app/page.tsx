@@ -39,7 +39,7 @@ export default function HomePage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+        <div className="text-gray-800">Loading...</div>
       </div>
     );
   }
@@ -52,7 +52,7 @@ export default function HomePage() {
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Daily Grid</h1>
-              <p className="text-gray-600 mt-1">Family Time-Blocking System</p>
+              <p className="text-gray-800 mt-1">Family Time-Blocking System</p>
             </div>
             <Link
               href="/templates"
@@ -96,7 +96,7 @@ export default function HomePage() {
             <h2 className="text-2xl font-semibold text-gray-900">Recent Schedules</h2>
           </div>
           {schedules.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-900">
               No schedules yet. Create your first one!
             </div>
           ) : (
@@ -120,7 +120,7 @@ export default function HomePage() {
             </Link>
           </div>
           {templates.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+            <div className="bg-white rounded-lg shadow p-8 text-center text-gray-900">
               No templates yet. Create your first template!
             </div>
           ) : (
@@ -162,7 +162,7 @@ function QuickActionCard({
     >
       <div className="text-4xl mb-3">{icon}</div>
       <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-      {date && <p className="text-gray-600 mt-1">{formatDateDisplay(date)}</p>}
+      {date && <p className="text-gray-800 mt-1">{formatDateDisplay(date)}</p>}
     </Link>
   );
 }
@@ -176,11 +176,11 @@ function ScheduleCard({ schedule }: { schedule: Schedule }) {
       <div className="flex justify-between items-start">
         <div>
           <h3 className="font-semibold text-gray-900">{schedule.date}</h3>
-          <p className="text-sm text-gray-600">{schedule.dayName}</p>
+          <p className="text-sm text-gray-800">{schedule.dayName}</p>
         </div>
         <span className="text-2xl">📋</span>
       </div>
-      <div className="mt-3 text-sm text-gray-500">
+      <div className="mt-3 text-sm text-gray-900">
         {schedule.activities?.length || 0} activities
       </div>
     </Link>
@@ -197,12 +197,12 @@ function TemplateCard({ template }: { template: Template }) {
         <div>
           <h3 className="font-semibold text-gray-900">{template.displayName}</h3>
           {template.description && (
-            <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+            <p className="text-sm text-gray-800 mt-1">{template.description}</p>
           )}
         </div>
         <span className="text-2xl">📝</span>
       </div>
-      <div className="mt-3 text-sm text-gray-500">
+      <div className="mt-3 text-sm text-gray-900">
         {template.activities?.length || 0} activities
       </div>
     </Link>

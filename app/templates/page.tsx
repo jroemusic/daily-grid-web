@@ -78,7 +78,7 @@ export default function TemplatesPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-600">Loading...</div>
+        <div className="text-gray-800">Loading...</div>
       </div>
     );
   }
@@ -94,7 +94,7 @@ export default function TemplatesPage() {
                 ← Back to Dashboard
               </Link>
               <h1 className="text-3xl font-bold text-gray-900 mt-2">Templates</h1>
-              <p className="text-gray-600 mt-1">Manage your schedule templates</p>
+              <p className="text-gray-800 mt-1">Manage your schedule templates</p>
             </div>
             <button
               onClick={() => setShowCreateForm(!showCreateForm)}
@@ -113,39 +113,39 @@ export default function TemplatesPage() {
             <h2 className="text-xl font-semibold mb-4">Create New Template</h2>
             <form onSubmit={createTemplate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   Name (unique identifier)
                 </label>
                 <input
                   type="text"
                   value={newTemplate.name}
                   onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   placeholder="school-day"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   Display Name
                 </label>
                 <input
                   type="text"
                   value={newTemplate.displayName}
                   onChange={(e) => setNewTemplate({ ...newTemplate, displayName: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   placeholder="School Day"
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-900 mb-1">
                   Description
                 </label>
                 <textarea
                   value={newTemplate.description}
                   onChange={(e) => setNewTemplate({ ...newTemplate, description: e.target.value })}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
                   rows={3}
                   placeholder="A typical school day schedule..."
                 />
@@ -160,7 +160,7 @@ export default function TemplatesPage() {
                 <button
                   type="button"
                   onClick={() => setShowCreateForm(false)}
-                  className="bg-gray-300 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                  className="bg-gray-300 text-gray-900 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
                 >
                   Cancel
                 </button>
@@ -171,7 +171,7 @@ export default function TemplatesPage() {
 
         {/* Templates List */}
         {templates.length === 0 ? (
-          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
+          <div className="bg-white rounded-lg shadow p-8 text-center text-gray-900">
             No templates yet. Create your first one!
           </div>
         ) : (
@@ -202,16 +202,16 @@ function TemplateCard({
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="font-semibold text-gray-900">{template.displayName}</h3>
-          <p className="text-sm text-gray-500">{template.name}</p>
+          <p className="text-sm text-gray-900">{template.name}</p>
         </div>
         <span className="text-2xl">📝</span>
       </div>
 
       {template.description && (
-        <p className="text-sm text-gray-600 mb-3">{template.description}</p>
+        <p className="text-sm text-gray-800 mb-3">{template.description}</p>
       )}
 
-      <div className="text-sm text-gray-500 mb-4">
+      <div className="text-sm text-gray-900 mb-4">
         {template.activities?.length || 0} activities
       </div>
 
