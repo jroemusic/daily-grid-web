@@ -103,63 +103,93 @@ export async function downloadPDF(schedule: Schedule, filename?: string): Promis
 }
 
 /**
- * Generate HTML for printable view
+ * Generate HTML for printable view - Grid format with columns for each person
  */
 export function generatePrintableHTML(schedule: Schedule): string {
-  const activitiesByPerson = groupActivitiesByPerson(schedule.activities);
+  const people = ['Jason', 'Kay', 'Emma', 'Toby'];
+
+  // Group activities by time slot
+  const timeSlots = new Map<string, Map<string, any>>();
+  for (const activity of schedule.activities) {
+    const timeKey = `${activity.start}-${activity.end}`;
+    if (!timeSlots.has(timeKey)) {
+      timeSlots.set(timeKey, new Map());
+    }
+    for (const person of activity.people || []) {
+      timeSlots.get(timeKey)!.set(person, activity);
+    }
+  }
+
+  // Sort time slots
+  const sortedSlots = Array.from(timeSlots.entries()).sort((a, b) => {
+    const [aStart] = a[0].split('-');
+    const [bStart] = b[0].split('-');
+    return aStart.localeCompare(bStart);
+  });
 
   const styles = `
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        padding: 20px;
-        line-height: 1.5;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 9pt;
+        line-height: 1.2;
+        padding: 0.3in;
+        max-width: 8in;
+        margin: 0 auto;
         background: white;
       }
       .header {
         text-align: center;
-        margin-bottom: 30px;
-        border-bottom: 2px solid #333;
-        padding-bottom: 20px;
-      }
-      .header h1 { font-size: 28px; margin-bottom: 5px; }
-      .header p { font-size: 16px; color: #666; }
-      .person-section {
-        margin-bottom: 30px;
-        page-break-inside: avoid;
-      }
-      .person-header {
-        font-size: 18px;
-        font-weight: bold;
-        margin-bottom: 15px;
+        border-bottom: 2px solid #4a6fa5;
         padding-bottom: 5px;
-        border-bottom: 1px solid #ccc;
+        margin-bottom: 8px;
       }
-      .activity {
-        display: flex;
-        margin-bottom: 12px;
-        padding: 8px;
-        border-radius: 4px;
-        border-left: 4px solid #ddd;
+      .header h1 {
+        font-size: 18pt;
+        color: #4a6fa5;
+        margin-bottom: 2px;
       }
-      .activity-time {
-        font-weight: bold;
-        min-width: 120px;
-        color: #333;
-      }
-      .activity-title {
-        flex: 1;
-      }
-      .activity-notes {
-        font-size: 12px;
+      .header .date {
+        font-size: 11pt;
         color: #666;
-        margin-top: 4px;
-        font-style: italic;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 8px;
+      }
+      th {
+        background: #4a6fa5;
+        color: white;
+        padding: 4px 4px;
+        text-align: left;
+        font-size: 8pt;
+        font-weight: bold;
+      }
+      td {
+        padding: 3px 4px;
+        border-bottom: 1px solid #ddd;
+        font-size: 8pt;
+        vertical-align: top;
+        width: 22%;
+      }
+      .time-col {
+        font-weight: bold;
+        color: #4a6fa5;
+        width: 55px;
+      }
+      tr:nth-child(even) {
+        background: #f9f9f9;
       }
       @media print {
-        body { padding: 0; }
-        .person-section { page-break-inside: avoid; }
+        body {
+          padding: 0.25in;
+          font-size: 8pt;
+        }
+        .header h1 {
+          font-size: 16pt;
+        }
       }
     </style>
   `;
@@ -169,38 +199,51 @@ export function generatePrintableHTML(schedule: Schedule): string {
     <html>
       <head>
         <meta charset="UTF-8">
-        <title>Daily Schedule - ${schedule.date}</title>
+        <title>Daily Grid - ${schedule.date}</title>
         ${styles}
       </head>
       <body>
         <div class="header">
-          <h1>Daily Schedule</h1>
-          <p>${schedule.dayName}, ${schedule.date}</p>
+          <h1>Daily Grid - ${schedule.dayName}</h1>
+          <p class="date">${schedule.date}</p>
         </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Jason</th>
+              <th>Kay</th>
+              <th>Emma</th>
+              <th>Toby</th>
+            </tr>
+          </thead>
+          <tbody>
   `;
 
-  for (const [person, activities] of Object.entries(activitiesByPerson)) {
-    if (activities.length === 0) continue;
-
+  for (const [timeKey, personActivities] of sortedSlots) {
+    const [start, end] = timeKey.split('-');
     html += `
-      <div class="person-section">
-        <div class="person-header">${person}'s Schedule</div>
+            <tr>
+              <td class="time-col">${start} - ${end}</td>
     `;
-
-    for (const activity of activities) {
-      html += `
-        <div class="activity" style="border-left-color: ${activity.color}">
-          <div class="activity-time">${activity.start} - ${activity.end}</div>
-          <div class="activity-title">${activity.title}</div>
-          ${activity.notes ? `<div class="activity-notes">${activity.notes}</div>` : ''}
-        </div>
-      `;
+    for (const person of people) {
+      const activity = personActivities.get(person);
+      if (activity) {
+        const bgColor = activity.color || '#fff';
+        // Check if color is light
+        const isLight = bgColor === '#f0f0f0' || bgColor === '#ffffff' || bgColor === '#fff';
+        const textColor = isLight ? '#333' : '#000';
+        html += `<td style="background: ${bgColor}; color: ${textColor}">${activity.title}</td>`;
+      } else {
+        html += `<td></td>`;
+      }
     }
-
-    html += `</div>`;
+    html += `</tr>`;
   }
 
   html += `
+          </tbody>
+        </table>
       </body>
     </html>
   `;
