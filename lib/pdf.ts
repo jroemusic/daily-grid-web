@@ -212,6 +212,34 @@ export function generatePrintableHTML(schedule: Schedule): string {
       tr:nth-child(even) {
         background: #f9f9f9;
       }
+      .legend {
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 1px solid #ddd;
+      }
+      .legend h3 {
+        font-size: 12pt;
+        margin-bottom: 10px;
+        color: #333;
+      }
+      .legend-items {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+      }
+      .legend-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 9pt;
+      }
+      .legend-color {
+        display: inline-block;
+        width: 16px;
+        height: 16px;
+        border-radius: 2px;
+      }
+
       @media print {
         body {
           padding: 0.25in;
@@ -276,6 +304,21 @@ export function generatePrintableHTML(schedule: Schedule): string {
   html += `
           </tbody>
         </table>
+
+        <div class="legend">
+          <h3>Color Legend</h3>
+          <div class="legend-items">
+            <div class="legend-item"><span class="legend-color" style="background: #c8e6c9"></span> Routine</div>
+            <div class="legend-item"><span class="legend-color" style="background: #fff9c4"></span> Meal</div>
+            <div class="legend-item"><span class="legend-color" style="background: #bbdefb"></span> Personal</div>
+            <div class="legend-item"><span class="legend-color" style="background: #d1c4e9"></span> Work</div>
+            <div class="legend-item"><span class="legend-color" style="background: #ffe0b2"></span> Family</div>
+            <div class="legend-item"><span class="legend-color" style="background: #b2dfdb"></span> School</div>
+            <div class="legend-item"><span class="legend-color" style="background: #f8bbd0"></span> Activity</div>
+            <div class="legend-item"><span class="legend-color" style="background: #f0f0f0"></span> Break</div>
+            <div class="legend-item"><span class="legend-color" style="background: #ffffff; border: 1px solid #ccc"></span> Other</div>
+          </div>
+        </div>
       </body>
     </html>
   `;
