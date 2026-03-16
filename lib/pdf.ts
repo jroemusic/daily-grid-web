@@ -146,7 +146,7 @@ export function generatePrintableHTML(schedule: Schedule): string {
         background: #4a6fa5;
         color: white;
         padding: 4px 4px;
-        text-align: left;
+        text-align: center;
         font-size: 8pt;
         font-weight: bold;
       }
