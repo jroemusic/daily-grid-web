@@ -99,11 +99,23 @@ option {
   transition: none !important;
 }
 
-/* Print styles - hide toolbar */
+/* Print styles - hide toolbar, landscape, preserve colors */
+@page {
+  size: landscape;
+  margin: 0.25in;
+}
+
 @media print {
+  /* Force landscape */
+  @page {
+    size: landscape;
+  }
+
   body {
     background: white !important;
     color: black !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 
   /* Hide everything except the printable content */
@@ -120,6 +132,7 @@ option {
   /* Print container should fill the page */
   .print-container {
     max-width: 100% !important;
+    width: 100% !important;
     padding: 0 !important;
     margin: 0 !important;
   }
@@ -133,5 +146,13 @@ option {
   iframe {
     height: 100vh !important;
     border: none !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ensure colors print */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

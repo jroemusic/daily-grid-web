@@ -57,8 +57,13 @@ export async function generatePDF(schedule: Schedule): Promise<Blob> {
   const opt = {
     margin: 0.25,
     filename: `daily-grid-${schedule.date}.pdf`,
-    image: { type: 'jpeg' as const, quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
+    image: { type: 'png' as const, quality: 1 },
+    html2canvas: {
+      scale: 2,
+      useCORS: true,
+      logging: false,
+      allowTaint: true
+    },
     jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' as const }
   };
 
