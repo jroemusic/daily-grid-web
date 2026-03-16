@@ -98,3 +98,40 @@ option {
 .initial-load * {
   transition: none !important;
 }
+
+/* Print styles - hide toolbar */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+
+  /* Hide everything except the printable content */
+  header, nav, footer, .no-print {
+    display: none !important;
+  }
+
+  /* Reset body padding for print */
+  body, main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  /* Print container should fill the page */
+  .print-container {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .print-container > div {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+
+  /* Ensure iframe container fills the page */
+  iframe {
+    height: 100vh !important;
+    border: none !important;
+  }
+}
