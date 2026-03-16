@@ -233,8 +233,8 @@ export function generatePrintableHTML(schedule: Schedule): string {
 
   for (const [timeKey, personActivities] of sortedSlots) {
     const [start, end] = timeKey.split('-');
-    const start12 = formatTime12Hour(start);
-    const end12 = formatTime12Hour(end);
+    const start12 = formatTime12Hour(start).replace(':00', '');
+    const end12 = formatTime12Hour(end).replace(':00', '');
     html += `
             <tr>
               <td class="time-col">${start12} - ${end12}</td>
