@@ -34,7 +34,7 @@ function getDayName(dateStr: string): string {
 }
 
 /**
- * Generate a PDF from a schedule
+ * Generate a PDF from a schedule using the exact same HTML as preview
  * Call this from client-side code only
  */
 export async function generatePDF(schedule: Schedule): Promise<Blob> {
@@ -42,156 +42,27 @@ export async function generatePDF(schedule: Schedule): Promise<Blob> {
     throw new Error('PDF generation must be called from client-side');
   }
 
-  const { jsPDF } = await import('jspdf');
-  // Landscape letter
-  const doc = new jsPDF('l', 'mm', 'letter');
+  // Use the exact same HTML as the preview
+  const html = generatePrintableHTML(schedule);
 
-  const pageWidth = 279; // letter width in landscape
-  const pageHeight = 216; // letter height in landscape
-  const margin = 10;
-  const people = ['Jason', 'Kay', 'Emma', 'Toby'];
+  // Use html2pdf.js to convert HTML to PDF
+  const html2pdf = (await import('html2pdf.js')).default;
 
-  // Group activities by time slot
-  const timeSlots = new Map<string, Map<string, any>>();
-  for (const activity of schedule.activities) {
-    const timeKey = `${activity.start}-${activity.end}`;
-    if (!timeSlots.has(timeKey)) {
-      timeSlots.set(timeKey, new Map());
-    }
-    for (const person of activity.people || []) {
-      timeSlots.get(timeKey)!.set(person, activity);
-    }
-  }
+  // Create a container with the HTML
+  const container = document.createElement('div');
+  container.innerHTML = html;
+  container.style.width = '8in';
+  container.style.background = 'white';
 
-  // Sort time slots
-  const sortedSlots = Array.from(timeSlots.entries()).sort((a, b) => {
-    const [aStart] = a[0].split('-');
-    const [bStart] = b[0].split('-');
-    return aStart.localeCompare(bStart);
-  });
+  const opt = {
+    margin: 0.25,
+    filename: `daily-grid-${schedule.date}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: 'in', format: 'letter', orientation: 'landscape' }
+  };
 
-  // Header
-  doc.setFontSize(18);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(74, 111, 165); // #4a6fa5
-  doc.text(`Daily Grid - ${getDayName(schedule.date)}`, margin, margin + 5);
-
-  doc.setFontSize(12);
-  doc.setTextColor(100);
-  doc.text(formatDate(schedule.date), margin, margin + 12);
-
-  doc.setTextColor(0);
-
-  // Table header
-  const tableTop = margin + 20;
-  const colWidth = (pageWidth - 2 * margin - 20) / 5; // Time + 4 people
-  const rowHeight = 10;
-
-  // Header row
-  doc.setFillColor(74, 111, 165); // #4a6fa5
-  doc.rect(margin, tableTop, pageWidth - 2 * margin, rowHeight, 'F');
-  doc.setTextColor(255);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-
-  doc.text('Time', margin + 2, tableTop + 7);
-  doc.text('Jason', margin + 20 + colWidth * 0, tableTop + 7);
-  doc.text('Kay', margin + 20 + colWidth * 1, tableTop + 7);
-  doc.text('Emma', margin + 20 + colWidth * 2, tableTop + 7);
-  doc.text('Toby', margin + 20 + colWidth * 3, tableTop + 7);
-
-  doc.setTextColor(0);
-  doc.setFont('helvetica', 'normal');
-
-  // Data rows
-  let yPos = tableTop + rowHeight;
-  let isEven = false;
-
-  for (const [timeKey, personActivities] of sortedSlots) {
-    const [start, end] = timeKey.split('-');
-    const start12 = formatTime12Hour(start).replace(':00', '');
-    const end12 = formatTime12Hour(end).replace(':00', '');
-
-    // Alternate row background
-    if (isEven) {
-      doc.setFillColor(249, 249, 249);
-      doc.rect(margin, yPos, pageWidth - 2 * margin, rowHeight, 'F');
-    }
-    isEven = !isEven;
-
-    // Time column
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(74, 111, 165);
-    doc.text(`${start12} - ${end12}`, margin + 2, yPos + 7);
-    doc.setTextColor(0);
-    doc.setFont('helvetica', 'normal');
-
-    // Person columns
-    for (let i = 0; i < people.length; i++) {
-      const person = people[i];
-      const activity = personActivities.get(person);
-      const xPos = margin + 20 + colWidth * i;
-
-      if (activity) {
-        const bgColor = activity.color || '#ffffff';
-        // Parse hex color
-        const r = parseInt(bgColor.slice(1, 3), 16);
-        const g = parseInt(bgColor.slice(3, 5), 16);
-        const b = parseInt(bgColor.slice(5, 7), 16);
-
-        doc.setFillColor(r, g, b);
-        doc.rect(xPos, yPos, colWidth, rowHeight, 'F');
-
-        doc.setFontSize(8);
-        // Truncate long text
-        const maxChars = Math.floor(colWidth / 4);
-        const title = activity.title.length > maxChars
-          ? activity.title.slice(0, maxChars - 2) + '...'
-          : activity.title;
-        doc.text(title, xPos + 2, yPos + 7);
-      }
-    }
-
-    yPos += rowHeight;
-  }
-
-  // Color legend at bottom
-  const legendY = yPos + 10;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Color Legend:', margin, legendY);
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8);
-
-  const legendItems = [
-    { color: '#c8e6c9', label: 'Routine' },
-    { color: '#fff9c4', label: 'Meal' },
-    { color: '#bbdefb', label: 'Personal' },
-    { color: '#d1c4e9', label: 'Work' },
-    { color: '#ffe0b2', label: 'Family' },
-    { color: '#b2dfdb', label: 'School' },
-    { color: '#f8bbd0', label: 'Activity' },
-    { color: '#f0f0f0', label: 'Break' },
-    { color: '#ffffff', label: 'Other' }
-  ];
-
-  let legendX = margin + 30;
-  for (const item of legendItems) {
-    const r = parseInt(item.color.slice(1, 3), 16);
-    const g = parseInt(item.color.slice(3, 5), 16);
-    const b = parseInt(item.color.slice(5, 7), 16);
-    doc.setFillColor(r, g, b);
-    doc.rect(legendX, legendY - 3, 6, 5, 'F');
-    if (item.color === '#ffffff') {
-      doc.setDrawColor(200);
-      doc.rect(legendX, legendY - 3, 6, 5);
-    }
-    doc.text(item.label, legendX + 8, legendY);
-    legendX += 30;
-  }
-
-  return new Blob([doc.output('blob')], { type: 'application/pdf' });
+  return html2pdf().set(opt).from(container).outputPdf('blob');
 }
 
 /**
