@@ -154,13 +154,16 @@ export function generatePrintableHTML(schedule: Schedule): string {
         padding: 3px 4px;
         border-bottom: 1px solid #ddd;
         font-size: 8pt;
-        vertical-align: top;
+        text-align: center;
+        vertical-align: middle;
         width: 22%;
       }
       .time-col {
         font-weight: bold;
         color: #4a6fa5;
         width: 55px;
+        text-align: center;
+        vertical-align: middle;
       }
       tr:nth-child(even) {
         background: #f9f9f9;
