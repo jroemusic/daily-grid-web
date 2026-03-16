@@ -43,75 +43,152 @@ export async function generatePDF(schedule: Schedule): Promise<Blob> {
   }
 
   const { jsPDF } = await import('jspdf');
-  const doc = new jsPDF('p', 'mm', 'letter');
+  // Landscape letter
+  const doc = new jsPDF('l', 'mm', 'letter');
 
-  const pageWidth = 216; // letter width in mm
-  const pageHeight = 279; // letter height in mm
-  const margin = 15;
-  const contentWidth = pageWidth - 2 * margin;
+  const pageWidth = 279; // letter width in landscape
+  const pageHeight = 216; // letter height in landscape
+  const margin = 10;
+  const people = ['Jason', 'Kay', 'Emma', 'Toby'];
 
-  let yPosition = margin;
+  // Group activities by time slot
+  const timeSlots = new Map<string, Map<string, any>>();
+  for (const activity of schedule.activities) {
+    const timeKey = `${activity.start}-${activity.end}`;
+    if (!timeSlots.has(timeKey)) {
+      timeSlots.set(timeKey, new Map());
+    }
+    for (const person of activity.people || []) {
+      timeSlots.get(timeKey)!.set(person, activity);
+    }
+  }
 
-  // Add title
-  doc.setFontSize(20);
+  // Sort time slots
+  const sortedSlots = Array.from(timeSlots.entries()).sort((a, b) => {
+    const [aStart] = a[0].split('-');
+    const [bStart] = b[0].split('-');
+    return aStart.localeCompare(bStart);
+  });
+
+  // Header
+  doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text(`Daily Schedule - ${schedule.date}`, margin, yPosition);
-  yPosition += 10;
+  doc.setTextColor(74, 111, 165); // #4a6fa5
+  doc.text(`Daily Grid - ${getDayName(schedule.date)}`, margin, margin + 5);
 
-  // Add day name
-  doc.setFontSize(14);
+  doc.setFontSize(12);
+  doc.setTextColor(100);
+  doc.text(formatDate(schedule.date), margin, margin + 12);
+
+  doc.setTextColor(0);
+
+  // Table header
+  const tableTop = margin + 20;
+  const colWidth = (pageWidth - 2 * margin - 20) / 5; // Time + 4 people
+  const rowHeight = 10;
+
+  // Header row
+  doc.setFillColor(74, 111, 165); // #4a6fa5
+  doc.rect(margin, tableTop, pageWidth - 2 * margin, rowHeight, 'F');
+  doc.setTextColor(255);
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+
+  doc.text('Time', margin + 2, tableTop + 7);
+  doc.text('Jason', margin + 20 + colWidth * 0, tableTop + 7);
+  doc.text('Kay', margin + 20 + colWidth * 1, tableTop + 7);
+  doc.text('Emma', margin + 20 + colWidth * 2, tableTop + 7);
+  doc.text('Toby', margin + 20 + colWidth * 3, tableTop + 7);
+
+  doc.setTextColor(0);
   doc.setFont('helvetica', 'normal');
-  doc.text(schedule.dayName, margin, yPosition);
-  yPosition += 15;
 
-  // Group activities by person
-  const activitiesByPerson = groupActivitiesByPerson(schedule.activities);
+  // Data rows
+  let yPos = tableTop + rowHeight;
+  let isEven = false;
 
-  // Print each person's schedule
-  for (const [person, activities] of Object.entries(activitiesByPerson)) {
-    if (activities.length === 0) continue;
+  for (const [timeKey, personActivities] of sortedSlots) {
+    const [start, end] = timeKey.split('-');
+    const start12 = formatTime12Hour(start).replace(':00', '');
+    const end12 = formatTime12Hour(end).replace(':00', '');
 
-    // Check if we need a new page
-    if (yPosition > pageHeight - 50) {
-      doc.addPage();
-      yPosition = margin;
+    // Alternate row background
+    if (isEven) {
+      doc.setFillColor(249, 249, 249);
+      doc.rect(margin, yPos, pageWidth - 2 * margin, rowHeight, 'F');
     }
+    isEven = !isEven;
 
-    // Person header
-    doc.setFontSize(12);
+    // Time column
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${person}'s Schedule:`, margin, yPosition);
-    yPosition += 7;
-
-    // Activities
+    doc.setTextColor(74, 111, 165);
+    doc.text(`${start12} - ${end12}`, margin + 2, yPos + 7);
+    doc.setTextColor(0);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(10);
 
-    for (const activity of activities) {
-      if (yPosition > pageHeight - 20) {
-        doc.addPage();
-        yPosition = margin;
-      }
+    // Person columns
+    for (let i = 0; i < people.length; i++) {
+      const person = people[i];
+      const activity = personActivities.get(person);
+      const xPos = margin + 20 + colWidth * i;
 
-      const timeRange = `${activity.start} - ${activity.end}`;
-      const line = `${timeRange} | ${activity.title}`;
+      if (activity) {
+        const bgColor = activity.color || '#ffffff';
+        // Parse hex color
+        const r = parseInt(bgColor.slice(1, 3), 16);
+        const g = parseInt(bgColor.slice(3, 5), 16);
+        const b = parseInt(bgColor.slice(5, 7), 16);
 
-      // Handle long text
-      const lines = doc.splitTextToSize(line, contentWidth);
-      doc.text(lines, margin + 5, yPosition);
-      yPosition += lines.length * 5 + 2;
+        doc.setFillColor(r, g, b);
+        doc.rect(xPos, yPos, colWidth, rowHeight, 'F');
 
-      // Add notes if present
-      if (activity.notes) {
-        doc.setTextColor(100);
-        const noteLines = doc.splitTextToSize(`  Note: ${activity.notes}`, contentWidth - 5);
-        doc.text(noteLines, margin + 5, yPosition);
-        yPosition += noteLines.length * 5 + 2;
-        doc.setTextColor(0);
+        doc.setFontSize(8);
+        // Truncate long text
+        const maxChars = Math.floor(colWidth / 4);
+        const title = activity.title.length > maxChars
+          ? activity.title.slice(0, maxChars - 2) + '...'
+          : activity.title;
+        doc.text(title, xPos + 2, yPos + 7);
       }
     }
 
-    yPosition += 10;
+    yPos += rowHeight;
+  }
+
+  // Color legend at bottom
+  const legendY = yPos + 10;
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Color Legend:', margin, legendY);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+
+  const legendItems = [
+    { color: '#c8e6c9', label: 'Routine' },
+    { color: '#fff9c4', label: 'Meal' },
+    { color: '#bbdefb', label: 'Personal' },
+    { color: '#d1c4e9', label: 'Work' },
+    { color: '#ffe0b2', label: 'Family' },
+    { color: '#b2dfdb', label: 'School' },
+    { color: '#f8bbd0', label: 'Activity' },
+    { color: '#f0f0f0', label: 'Break' },
+    { color: '#ffffff', label: 'Other' }
+  ];
+
+  let legendX = margin + 30;
+  for (const item of legendItems) {
+    const r = parseInt(item.color.slice(1, 3), 16);
+    const g = parseInt(item.color.slice(3, 5), 16);
+    const b = parseInt(item.color.slice(5, 7), 16);
+    doc.setFillColor(r, g, b);
+    doc.rect(legendX, legendY - 3, 6, 5, 'F');
+    if (item.color === '#ffffff') {
+      doc.setDrawColor(200);
+      doc.rect(legendX, legendY - 3, 6, 5);
+    }
+    doc.text(item.label, legendX + 8, legendY);
+    legendX += 30;
   }
 
   return new Blob([doc.output('blob')], { type: 'application/pdf' });
