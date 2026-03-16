@@ -19,7 +19,17 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ schedule });
+    // Map database fields to frontend fields
+    const mappedSchedule = {
+      id: schedule.id,
+      date: schedule.date,
+      dayName: schedule.day_name,
+      activities: schedule.activities,
+      calendarEvents: schedule.calendar_events,
+      reminders: schedule.reminders
+    };
+
+    return NextResponse.json({ schedule: mappedSchedule });
   } catch (error) {
     console.error('Error fetching schedule:', error);
     return NextResponse.json(
