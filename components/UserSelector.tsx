@@ -51,8 +51,7 @@ export default function UserSelector({ onUserChange }: UserSelectorProps) {
             `}
             style={{
               backgroundColor: user.color,
-              color: 'white',
-              ringColor: user.color
+              color: 'white'
             }}
           >
             {user.name}
