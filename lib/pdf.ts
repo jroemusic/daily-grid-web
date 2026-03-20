@@ -86,6 +86,72 @@ export async function downloadPDF(schedule: Schedule, filename?: string): Promis
 }
 
 /**
+ * Get current time in HH:MM format
+ */
+function getCurrentTime(): string {
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+/**
+ * Check if current time is within a time slot
+ */
+function isCurrentTimeSlot(start: string, end: string): boolean {
+  const current = getCurrentTime();
+  return current >= start && current < end;
+}
+
+/**
+ * Check if a time slot is upcoming (after current time)
+ */
+function isUpcomingSlot(start: string): boolean {
+  const current = getCurrentTime();
+  return start > current;
+}
+
+/**
+ * Get minutes until a time slot
+ */
+function getMinutesUntil(start: string): number {
+  const now = new Date();
+  const [hours, minutes] = start.split(':').map(Number);
+  const slotTime = new Date();
+  slotTime.setHours(hours, minutes, 0, 0);
+  const diff = slotTime.getTime() - now.getTime();
+  return Math.floor(diff / 60000); // Convert to minutes
+}
+
+/**
+ * Calculate completion percentage
+ */
+function calculateCompletion(activities: any[]): { completed: number; total: number; percentage: number } {
+  const completed = activities.filter(a => a.completed).length;
+  const total = activities.length;
+  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { completed, total, percentage };
+}
+
+/**
+ * Get color-coded class based on activity type/color
+ */
+function getBlockTypeClass(activity: any): string {
+  const color = activity.color || '#ffffff';
+  const colorMap: Record<string, string> = {
+    '#c8e6c9': 'block-routine',      // Green - Routine
+    '#fff9c4': 'block-meal',         // Yellow - Meal
+    '#bbdefb': 'block-personal',     // Blue - Personal
+    '#d1c4e9': 'block-work',         // Purple - Work
+    '#ffe0b2': 'block-family',       // Orange - Family
+    '#b2dfdb': 'block-school',       // Teal - School
+    '#f8bbd0': 'block-activity',     // Pink - Activity
+    '#f0f0f0': 'block-break',        // Gray - Break
+  };
+  return colorMap[color] || 'block-other';
+}
+
+/**
  * Generate HTML for printable view - Grid format with columns for each person
  */
 export function generatePrintableHTML(schedule: Schedule): string {
@@ -110,99 +176,296 @@ export function generatePrintableHTML(schedule: Schedule): string {
     return aStart.localeCompare(bStart);
   });
 
+  // Calculate completion stats
+  const completion = calculateCompletion(schedule.activities);
+
+  // Find current and next slots
+  let currentSlot: [string, Map<string, any>] | null = null;
+  let nextSlot: [string, Map<string, any>] | null = null;
+  let foundCurrent = false;
+
+  for (const [timeKey, personActivities] of sortedSlots) {
+    const [start] = timeKey.split('-');
+    if (!foundCurrent && isCurrentTimeSlot(start, timeKey.split('-')[1])) {
+      currentSlot = [timeKey, personActivities];
+      foundCurrent = true;
+    } else if (foundCurrent && !nextSlot && isUpcomingSlot(start)) {
+      nextSlot = [timeKey, personActivities];
+      break;
+    }
+  }
+
   const styles = `
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       body {
-        font-family: Arial, Helvetica, sans-serif;
-        font-size: 9pt;
-        line-height: 1.2;
+        font-family: 'Nunito', 'Segoe UI', Arial, sans-serif;
+        font-size: 11pt;
+        line-height: 1.4;
         padding: 0.3in;
         max-width: 8in;
         margin: 0 auto;
         background: white;
       }
+
+      /* Header */
       .header {
         text-align: center;
-        border-bottom: 2px solid #4a6fa5;
-        padding-bottom: 5px;
-        margin-bottom: 8px;
+        border-bottom: 3px solid #ff9f74;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
       }
       .header h1 {
-        font-size: 18pt;
-        color: #4a6fa5;
-        margin-bottom: 2px;
+        font-size: 20pt;
+        color: #ff9f74;
+        margin-bottom: 4px;
+        font-weight: 700;
       }
       .header .date {
-        font-size: 11pt;
+        font-size: 12pt;
         color: #666;
+        font-weight: 500;
       }
+
+      /* Progress Bar */
+      .progress-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 12px 20px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        color: white;
+      }
+      .progress-bar-container {
+        background: rgba(255,255,255,0.3);
+        height: 24px;
+        border-radius: 12px;
+        overflow: hidden;
+        margin-top: 8px;
+      }
+      .progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #4ade80 0%, #22c55e 100%);
+        border-radius: 12px;
+        transition: width 0.5s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        font-size: 11pt;
+        color: white;
+      }
+      .progress-text {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-weight: 600;
+      }
+
+      /* Next Up Section */
+      .next-up {
+        background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%);
+        padding: 12px 20px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        border-left: 5px solid #f39c12;
+      }
+      .next-up h3 {
+        font-size: 13pt;
+        color: #2d3436;
+        margin-bottom: 6px;
+        font-weight: 700;
+      }
+      .next-up-content {
+        font-size: 12pt;
+        color: #2d3436;
+        font-weight: 600;
+      }
+
+      /* Table */
       table {
         width: 100%;
         border-collapse: collapse;
-        margin-bottom: 8px;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-radius: 8px;
+        overflow: hidden;
       }
       th {
-        background: #4a6fa5;
+        background: linear-gradient(135deg, #ff9f74 0%, #ffcf87 100%);
         color: white;
-        padding: 4px 4px;
+        padding: 8px 6px;
         text-align: center;
-        font-size: 8pt;
-        font-weight: bold;
+        font-size: 10pt;
+        font-weight: 700;
+        text-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
       td {
-        padding: 3px 4px;
-        border-bottom: 1px solid #ddd;
-        font-size: 8pt;
+        padding: 6px 8px;
+        border-bottom: 1px solid #e0e0e0;
+        font-size: 11pt;
         text-align: center;
         vertical-align: middle;
         width: 22%;
+        font-weight: 500;
       }
       .time-col {
-        font-weight: bold;
-        color: #4a6fa5;
-        width: 55px;
+        font-weight: 700;
+        color: #ff9f74;
+        width: 65px;
         text-align: center;
         vertical-align: middle;
+        font-size: 10pt;
       }
-      tr:nth-child(even) {
+
+      /* Current Time Row - Pulse Animation */
+      tr.current-time {
+        background: linear-gradient(90deg, rgba(255, 107, 107, 0.15) 0%, rgba(255, 107, 107, 0.25) 50%, rgba(255, 107, 107, 0.15) 100%);
+        animation: pulse 2s ease-in-out infinite;
+        border-left: 4px solid #ff6b6b;
+        border-right: 4px solid #ff6b6b;
+      }
+      @keyframes pulse {
+        0%, 100% { background: linear-gradient(90deg, rgba(255, 107, 107, 0.15) 0%, rgba(255, 107, 107, 0.25) 50%, rgba(255, 107, 107, 0.15) 100%); }
+        50% { background: linear-gradient(90deg, rgba(255, 107, 107, 0.25) 0%, rgba(255, 107, 107, 0.35) 50%, rgba(255, 107, 107, 0.25) 100%); }
+      }
+      tr.current-time td {
+        font-weight: 600;
+      }
+      .current-indicator {
+        display: inline-block;
+        background: #ff6b6b;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 8pt;
+        font-weight: 700;
+        margin-left: 6px;
+        animation: glow 1.5s ease-in-out infinite;
+      }
+      @keyframes glow {
+        0%, 100% { box-shadow: 0 0 5px rgba(255, 107, 107, 0.5); }
+        50% { box-shadow: 0 0 15px rgba(255, 107, 107, 0.8); }
+      }
+
+      /* Color-Coded Block Types */
+      .block-routine { background: #c8e6c9 !important; color: #1b5e20 !important; }
+      .block-meal { background: #fff9c4 !important; color: #f57f17 !important; }
+      .block-personal { background: #bbdefb !important; color: #0d47a1 !important; }
+      .block-work { background: #d1c4e9 !important; color: #4a148c !important; }
+      .block-family { background: #ffe0b2 !important; color: #e65100 !important; }
+      .block-school { background: #b2dfdb !important; color: #004d40 !important; }
+      .block-activity { background: #f8bbd0 !important; color: #880e4f !important; }
+      .block-break { background: #f0f0f0 !important; color: #424242 !important; }
+      .block-other { background: #ffffff !important; color: #212121 !important; border: 1px solid #e0e0e0 !important; }
+
+      /* Striped rows */
+      tr:nth-child(even):not(.current-time) {
         background: #f9f9f9;
       }
+
+      /* Completed activities */
+      .completed {
+        text-decoration: line-through;
+        opacity: 0.5;
+      }
+
+      /* Legend */
       .legend {
         margin-top: 20px;
         padding-top: 15px;
-        border-top: 1px solid #ddd;
+        border-top: 2px solid #ff9f74;
       }
       .legend h3 {
-        font-size: 12pt;
-        margin-bottom: 10px;
-        color: #333;
+        font-size: 13pt;
+        margin-bottom: 12px;
+        color: #2d3436;
+        font-weight: 700;
       }
       .legend-items {
         display: flex;
         flex-wrap: wrap;
-        gap: 15px;
+        gap: 18px;
       }
       .legend-item {
         display: flex;
         align-items: center;
-        gap: 5px;
-        font-size: 9pt;
+        gap: 6px;
+        font-size: 10pt;
+        font-weight: 500;
       }
       .legend-color {
         display: inline-block;
-        width: 16px;
-        height: 16px;
-        border-radius: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 3px;
+        border: 1px solid rgba(0,0,0,0.1);
+      }
+
+      /* Quick Actions */
+      .quick-actions {
+        margin-top: 16px;
+        padding: 12px;
+        background: #f8f9fa;
+        border-radius: 8px;
+      }
+      .quick-action-btn {
+        display: inline-block;
+        padding: 8px 16px;
+        margin: 4px;
+        border: none;
+        border-radius: 6px;
+        font-size: 10pt;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+      .btn-complete { background: #22c55e; color: white; }
+      .btn-late { background: #f59e0b; color: white; }
+      .btn-copy { background: #3b82f6; color: white; }
+      .quick-action-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+      }
+
+      /* Mobile Optimization */
+      @media (max-width: 768px) {
+        body {
+          font-size: 12pt;
+          padding: 0.2in;
+        }
+        .header h1 {
+          font-size: 18pt;
+        }
+        td {
+          font-size: 11pt;
+          padding: 8px 6px;
+        }
+        .time-col {
+          font-size: 10pt;
+          width: 55px;
+        }
+        th {
+          font-size: 9pt;
+          padding: 6px 4px;
+        }
+        .progress-section, .next-up {
+          padding: 10px 14px;
+        }
       }
 
       @media print {
         body {
           padding: 0.25in;
-          font-size: 8pt;
+          font-size: 10pt;
         }
         .header h1 {
           font-size: 16pt;
+        }
+        .quick-actions {
+          display: none;
+        }
+        tr.current-time {
+          animation: none;
         }
       }
     </style>
@@ -213,7 +476,9 @@ export function generatePrintableHTML(schedule: Schedule): string {
     <html>
       <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Daily Grid - ${schedule.date}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
         ${styles}
       </head>
       <body>
@@ -221,6 +486,49 @@ export function generatePrintableHTML(schedule: Schedule): string {
           <h1>Daily Grid - ${getDayName(schedule.date)}</h1>
           <p class="date">${formatDate(schedule.date)}</p>
         </div>
+
+        <!-- Progress Bar -->
+        <div class="progress-section">
+          <div class="progress-text">
+            <span>Today's Progress</span>
+            <span>${completion.completed} of ${completion.total} blocks complete</span>
+          </div>
+          <div class="progress-bar-container">
+            <div class="progress-bar" style="width: ${completion.percentage}%">${completion.percentage}%</div>
+          </div>
+        </div>
+
+        ${(() => {
+          if (nextSlot) {
+            const [nextTimeKey, nextActivities] = nextSlot;
+            const [nextStart, nextEnd] = nextTimeKey.split('-');
+            const nextStart12 = formatTime12Hour(nextStart).replace(':00', '');
+            const nextEnd12 = formatTime12Hour(nextEnd).replace(':00', '');
+            const minutesUntil = getMinutesUntil(nextStart);
+
+            // Find the first non-empty activity in the next slot
+            let nextActivityTitle = "Free time";
+            for (const person of people) {
+              const activity = nextActivities.get(person);
+              if (activity && activity.title) {
+                nextActivityTitle = activity.title;
+                break;
+              }
+            }
+
+            return `
+              <div class="next-up">
+                <h3>⏰ Next Up</h3>
+                <div class="next-up-content">
+                  ${nextActivityTitle} (${nextStart12} - ${nextEnd12})
+                  ${minutesUntil > 0 ? ` - in ${minutesUntil} minutes` : ' - starting soon!'}
+                </div>
+              </div>
+            `;
+          }
+          return '';
+        })()}
+
         <table>
           <thead>
             <tr>
@@ -238,27 +546,22 @@ export function generatePrintableHTML(schedule: Schedule): string {
     const [start, end] = timeKey.split('-');
     const start12 = formatTime12Hour(start).replace(':00', '');
     const end12 = formatTime12Hour(end).replace(':00', '');
+
+    // Check if this is the current time slot
+    const isCurrent = currentSlot && timeKey === currentSlot[0];
+
     html += `
-            <tr>
-              <td class="time-col">${start12} - ${end12}</td>
+            <tr${isCurrent ? ' class="current-time"' : ''}>
+              <td class="time-col">${start12} - ${end12}${isCurrent ? '<span class="current-indicator">NOW</span>' : ''}</td>
     `;
+
     for (const person of people) {
       const activity = personActivities.get(person);
       if (activity) {
-        let bgColor = activity.color || '#fff';
-        let textColor = '#000';
-        let style = '';
+        const blockClass = getBlockTypeClass(activity);
+        const completedClass = activity.completed ? 'completed' : '';
 
-        if (activity.completed) {
-          // Grayed out for completed activities
-          style = 'text-decoration: line-through; opacity: 0.5;';
-        } else {
-          // Check if color is light
-          const isLight = bgColor === '#f0f0f0' || bgColor === '#ffffff' || bgColor === '#fff';
-          textColor = isLight ? '#333' : '#000';
-        }
-
-        html += `<td style="background: ${bgColor}; color: ${textColor}; ${style}">${activity.title}</td>`;
+        html += `<td class="${blockClass} ${completedClass}">${activity.title}</td>`;
       } else {
         html += `<td></td>`;
       }
@@ -269,6 +572,16 @@ export function generatePrintableHTML(schedule: Schedule): string {
   html += `
           </tbody>
         </table>
+
+        <!-- Quick Actions -->
+        <div class="quick-actions">
+          <div style="text-align: center; margin-bottom: 8px; font-weight: 700; color: #2d3436;">Quick Actions</div>
+          <div style="text-align: center;">
+            <button class="quick-action-btn btn-complete" onclick="markCurrentComplete()">✓ Mark Current Complete</button>
+            <button class="quick-action-btn btn-late" onclick="markRunningLate()">⏱ Running 15 Min Late</button>
+            <button class="quick-action-btn btn-copy" onclick="copyToTomorrow()">📋 Copy to Tomorrow</button>
+          </div>
+        </div>
 
         <div class="legend">
           <h3>Color Legend</h3>
@@ -284,6 +597,28 @@ export function generatePrintableHTML(schedule: Schedule): string {
             <div class="legend-item"><span class="legend-color" style="background: #ffffff; border: 1px solid #ccc"></span> Other</div>
           </div>
         </div>
+
+        <script>
+          function markCurrentComplete() {
+            alert('This feature would mark the current time block as complete.\\n\\n(Note: Full functionality requires database integration)');
+          }
+
+          function markRunningLate() {
+            alert('This feature would shift all remaining blocks by 15 minutes.\\n\\n(Note: Full functionality requires database integration)');
+          }
+
+          function copyToTomorrow() {
+            alert('This feature would copy today\\'s schedule to tomorrow.\\n\\n(Note: Full functionality requires database integration)');
+          }
+
+          // Auto-scroll to current time slot on load
+          window.addEventListener('load', function() {
+            const currentRow = document.querySelector('.current-time');
+            if (currentRow) {
+              currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          });
+        </script>
       </body>
     </html>
   `;
