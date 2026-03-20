@@ -86,9 +86,10 @@ export async function downloadPDF(schedule: Schedule, filename?: string): Promis
 }
 
 /**
- * Get current time in HH:MM format
+ * Get current time in HH:MM format (client-side only)
+ * This must be called from browser JavaScript to use local timezone
  */
-function getCurrentTime(): string {
+function getCurrentTimeClientSide(): string {
   const now = new Date();
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
@@ -96,25 +97,25 @@ function getCurrentTime(): string {
 }
 
 /**
- * Check if current time is within a time slot
+ * Check if current time is within a time slot (client-side only)
  */
-function isCurrentTimeSlot(start: string, end: string): boolean {
-  const current = getCurrentTime();
+function isCurrentTimeSlotClientSide(start: string, end: string): boolean {
+  const current = getCurrentTimeClientSide();
   return current >= start && current < end;
 }
 
 /**
- * Check if a time slot is upcoming (after current time)
+ * Check if a time slot is upcoming (after current time) (client-side only)
  */
-function isUpcomingSlot(start: string): boolean {
-  const current = getCurrentTime();
+function isUpcomingSlotClientSide(start: string): boolean {
+  const current = getCurrentTimeClientSide();
   return start > current;
 }
 
 /**
- * Get minutes until a time slot
+ * Get minutes until a time slot (client-side only)
  */
-function getMinutesUntil(start: string): number {
+function getMinutesUntilClientSide(start: string): number {
   const now = new Date();
   const [hours, minutes] = start.split(':').map(Number);
   const slotTime = new Date();
@@ -178,22 +179,6 @@ export function generatePrintableHTML(schedule: Schedule): string {
 
   // Calculate completion stats
   const completion = calculateCompletion(schedule.activities);
-
-  // Find current and next slots
-  let currentSlot: [string, Map<string, any>] | null = null;
-  let nextSlot: [string, Map<string, any>] | null = null;
-  let foundCurrent = false;
-
-  for (const [timeKey, personActivities] of sortedSlots) {
-    const [start] = timeKey.split('-');
-    if (!foundCurrent && isCurrentTimeSlot(start, timeKey.split('-')[1])) {
-      currentSlot = [timeKey, personActivities];
-      foundCurrent = true;
-    } else if (foundCurrent && !nextSlot && isUpcomingSlot(start)) {
-      nextSlot = [timeKey, personActivities];
-      break;
-    }
-  }
 
   const styles = `
     <style>
@@ -498,36 +483,11 @@ export function generatePrintableHTML(schedule: Schedule): string {
           </div>
         </div>
 
-        ${(() => {
-          if (nextSlot) {
-            const [nextTimeKey, nextActivities] = nextSlot;
-            const [nextStart, nextEnd] = nextTimeKey.split('-');
-            const nextStart12 = formatTime12Hour(nextStart).replace(':00', '');
-            const nextEnd12 = formatTime12Hour(nextEnd).replace(':00', '');
-            const minutesUntil = getMinutesUntil(nextStart);
-
-            // Find the first non-empty activity in the next slot
-            let nextActivityTitle = "Free time";
-            for (const person of people) {
-              const activity = nextActivities.get(person);
-              if (activity && activity.title) {
-                nextActivityTitle = activity.title;
-                break;
-              }
-            }
-
-            return `
-              <div class="next-up">
-                <h3>⏰ Next Up</h3>
-                <div class="next-up-content">
-                  ${nextActivityTitle} (${nextStart12} - ${nextEnd12})
-                  ${minutesUntil > 0 ? ` - in ${minutesUntil} minutes` : ' - starting soon!'}
-                </div>
-              </div>
-            `;
-          }
-          return '';
-        })()}
+        <!-- Next Up Section (populated by JavaScript) -->
+        <div class="next-up" id="nextUpSection" style="display: none;">
+          <h3>⏰ Next Up</h3>
+          <div class="next-up-content" id="nextUpContent"></div>
+        </div>
 
         <table>
           <thead>
@@ -547,12 +507,9 @@ export function generatePrintableHTML(schedule: Schedule): string {
     const start12 = formatTime12Hour(start).replace(':00', '');
     const end12 = formatTime12Hour(end).replace(':00', '');
 
-    // Check if this is the current time slot
-    const isCurrent = currentSlot && timeKey === currentSlot[0];
-
     html += `
-            <tr${isCurrent ? ' class="current-time"' : ''}>
-              <td class="time-col">${start12} - ${end12}${isCurrent ? '<span class="current-indicator">NOW</span>' : ''}</td>
+            <tr data-start="${start}" data-end="${end}" data-time-key="${timeKey}">
+              <td class="time-col">${start12} - ${end12}<span class="current-indicator" style="display: none;">NOW</span></td>
     `;
 
     for (const person of people) {
@@ -611,11 +568,89 @@ export function generatePrintableHTML(schedule: Schedule): string {
             alert('This feature would copy today\\'s schedule to tomorrow.\\n\\n(Note: Full functionality requires database integration)');
           }
 
-          // Auto-scroll to current time slot on load
+          // Client-side timezone-aware current time detection
+          function getCurrentTime() {
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            return \`\${hours}:\${minutes}\`;
+          }
+
+          function getMinutesUntil(timeStr) {
+            const now = new Date();
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            const slotTime = new Date();
+            slotTime.setHours(hours, minutes, 0, 0);
+            const diff = slotTime.getTime() - now.getTime();
+            return Math.floor(diff / 60000);
+          }
+
+          function formatTime12(timeStr) {
+            const [hours, minutes] = timeStr.split(':');
+            const h = parseInt(hours, 10);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return \`\${h12}:\${minutes} \${ampm}\`;
+          }
+
+          // Highlight current time slot and show next up
           window.addEventListener('load', function() {
-            const currentRow = document.querySelector('.current-time');
+            const currentTime = getCurrentTime();
+            const rows = Array.from(document.querySelectorAll('tbody tr[data-time-key]'));
+            let currentRow = null;
+            let nextRow = null;
+
+            // Find current and next rows
+            for (let i = 0; i < rows.length; i++) {
+              const row = rows[i];
+              const start = row.getAttribute('data-start');
+              const end = row.getAttribute('data-end');
+
+              if (currentTime >= start && currentTime < end) {
+                currentRow = row;
+                if (i + 1 < rows.length) {
+                  nextRow = rows[i + 1];
+                }
+                break;
+              }
+            }
+
+            // Highlight current row
             if (currentRow) {
+              currentRow.classList.add('current-time');
+              const indicator = currentRow.querySelector('.current-indicator');
+              if (indicator) {
+                indicator.style.display = 'inline-block';
+              }
+              // Auto-scroll to current row
               currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            // Show next up section
+            if (nextRow) {
+              const nextStart = nextRow.getAttribute('data-start');
+              const nextEnd = nextRow.getAttribute('data-end');
+              const nextStart12 = formatTime12(nextStart).replace(':00', '');
+              const nextEnd12 = formatTime12(nextEnd).replace(':00', '');
+              const minutesUntil = getMinutesUntil(nextStart);
+
+              // Get activity title from first non-empty cell
+              const cells = nextRow.querySelectorAll('td:not(.time-col)');
+              let activityTitle = 'Free time';
+              for (const cell of cells) {
+                if (cell.textContent && cell.textContent.trim()) {
+                  activityTitle = cell.textContent.trim();
+                  break;
+                }
+              }
+
+              const nextUpContent = document.getElementById('nextUpContent');
+              const nextUpSection = document.getElementById('nextUpSection');
+
+              if (nextUpContent && nextUpSection) {
+                nextUpContent.textContent = \`\${activityTitle} (\${nextStart12} - \${nextEnd12})\${minutesUntil > 0 ? \` - in \${minutesUntil} minutes\` : ' - starting soon!'}\`;
+                nextUpSection.style.display = 'block';
+              }
             }
           });
         </script>
