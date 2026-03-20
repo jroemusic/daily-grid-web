@@ -17,7 +17,7 @@ function formatTime12Hour(time: string): string {
 /**
  * Format date as "March 16, 2026"
  */
-function formatDate(dateStr: string): string {
+export function formatDate(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00');
   const months = ['January', 'February', 'March', 'April', 'May', 'June',
                   'July', 'August', 'September', 'October', 'November', 'December'];
@@ -27,7 +27,7 @@ function formatDate(dateStr: string): string {
 /**
  * Get day name from date
  */
-function getDayName(dateStr: string): string {
+export function getDayName(dateStr: string): string {
   const date = new Date(dateStr + 'T00:00:00');
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return days[date.getDay()];
