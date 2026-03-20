@@ -57,7 +57,7 @@ export async function GET(
       }
     } catch (e) {
       // If JSON parsing fails, return empty array
-      console.warn('Failed to parse GOG output:', e.message);
+      console.warn('Failed to parse GOG output:', e instanceof Error ? e.message : 'Unknown error');
       events = [];
     }
 
