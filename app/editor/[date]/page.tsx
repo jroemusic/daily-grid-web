@@ -1,25 +1,23 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect, useState, use, useCallback } from 'react';
 import Link from 'next/link';
-import { format } from 'date-fns';
 import { Schedule, Activity, ActivityType, ACTIVITY_COLORS } from '@/lib/types';
-import { getDayName, timeToMinutes, minutesToTime } from '@/lib/time';
-import { openPrintableView } from '@/lib/pdf';
+import { getDayName, getTodayDate } from '@/lib/time';
+import { formatDate, openPrintableView } from '@/lib/pdf';
+import ScheduleGrid from '@/components/ScheduleGrid';
 
 export default function EditorPage({ params }: { params: Promise<{ date: string }> }) {
   const resolvedParams = use(params);
-  const router = useRouter();
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
-  const [templates, setTemplates] = useState<{name: string, displayName: string}[]>([]);
+  const [editMode, setEditMode] = useState(true);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [templates, setTemplates] = useState<{ name: string; displayName: string }[]>([]);
 
   useEffect(() => {
     loadSchedule();
-    // Load templates
     fetch('/api/templates')
       .then(res => res.json())
       .then(data => {
@@ -30,37 +28,42 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
   async function loadSchedule() {
     try {
-      if (resolvedParams.date === 'new') {
-        // Create new empty schedule
-        const today = new Date().toISOString().split('T')[0];
-        setSchedule({
+      let scheduleDate = resolvedParams.date;
+      if (scheduleDate === 'new') {
+        scheduleDate = getTodayDate();
+      }
+
+      let scheduleData: Schedule | null = null;
+
+      const res = await fetch(`/api/schedules/${scheduleDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        scheduleData = data.schedule;
+      } else if (res.status === 404) {
+        scheduleData = {
           id: '',
-          date: today,
-          dayName: getDayName(today),
+          date: scheduleDate,
+          dayName: getDayName(scheduleDate),
           activities: [],
           calendarEvents: [],
           reminders: []
-        });
+        };
       } else {
-        // Load existing schedule
-        const res = await fetch(`/api/schedules/${resolvedParams.date}`);
-        if (res.ok) {
-          const data = await res.json();
-          setSchedule(data.schedule);
-        } else if (res.status === 404) {
-          // Create new schedule for this date
-          setSchedule({
-            id: '',
-            date: resolvedParams.date,
-            dayName: getDayName(resolvedParams.date),
-            activities: [],
-            calendarEvents: [],
-            reminders: []
-          });
-        } else {
-          throw new Error('Failed to load schedule');
-        }
+        throw new Error('Failed to load schedule');
       }
+
+      // Fetch calendar events
+      try {
+        const calendarRes = await fetch(`/api/google-calendar/${scheduleDate}`);
+        if (calendarRes.ok) {
+          const calendarData = await calendarRes.json();
+          scheduleData!.calendarEvents = calendarData.events || [];
+        }
+      } catch (e) {
+        console.warn('Failed to load calendar events:', e);
+      }
+
+      setSchedule(scheduleData);
     } catch (error) {
       console.error('Error loading schedule:', error);
     } finally {
@@ -70,31 +73,31 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
   async function saveSchedule() {
     if (!schedule) return;
-
     setSaving(true);
     try {
       const method = schedule.id ? 'PUT' : 'POST';
-      const url = schedule.id ? '/api/schedules' : '/api/schedules';
+      const url = '/api/schedules';
+      const body: any = {
+        date: schedule.date,
+        dayName: schedule.dayName,
+        activities: schedule.activities,
+        calendarEvents: schedule.calendarEvents || [],
+        reminders: schedule.reminders || []
+      };
+      if (schedule.id) body.id = schedule.id;
 
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: schedule.id,
-          date: schedule.date,
-          dayName: schedule.dayName,
-          activities: schedule.activities,
-          calendarEvents: schedule.calendarEvents,
-          reminders: schedule.reminders
-        })
+        body: JSON.stringify(body)
       });
 
       if (res.ok) {
         const data = await res.json();
         setSchedule(data.schedule);
-        alert('Schedule saved!');
       } else {
-        throw new Error('Failed to save');
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to save');
       }
     } catch (error) {
       console.error('Error saving schedule:', error);
@@ -122,57 +125,45 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     } catch (error) {
       console.error('Error loading template:', error);
     }
+    setShowTemplatePicker(false);
   }
 
-  function addActivity() {
+  const handleActivityUpdate = useCallback((index: number, updates: Partial<Activity>) => {
     if (!schedule) return;
+    const newActivities = [...schedule.activities];
+    newActivities[index] = { ...newActivities[index], ...updates };
+    setSchedule({ ...schedule, activities: newActivities });
+  }, [schedule]);
 
-    const lastActivity = schedule.activities[schedule.activities.length - 1];
-    const start = lastActivity ? lastActivity.end : '07:00';
-    const startMinutes = timeToMinutes(start);
-    const end = minutesToTime(startMinutes + 60);
-
+  const handleActivityAdd = useCallback((start: string, end: string, person: string) => {
+    if (!schedule) return;
     const newActivity: Activity = {
       id: `act-${Date.now()}`,
       title: 'New Activity',
       start,
       end,
-      people: ['Jason'],
+      people: [person],
       type: 'other',
       color: ACTIVITY_COLORS.other
     };
-
     setSchedule({
       ...schedule,
       activities: [...schedule.activities, newActivity]
     });
-  }
+  }, [schedule]);
 
-  function updateActivity(index: number, updates: Partial<Activity>) {
+  const handleActivityRemove = useCallback((index: number) => {
     if (!schedule) return;
-
-    const newActivities = [...schedule.activities];
-    newActivities[index] = { ...newActivities[index], ...updates };
-
-    setSchedule({
-      ...schedule,
-      activities: newActivities
-    });
-  }
-
-  function removeActivity(index: number) {
-    if (!schedule) return;
-
     setSchedule({
       ...schedule,
       activities: schedule.activities.filter((_, i) => i !== index)
     });
-  }
+  }, [schedule]);
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="text-gray-800">Loading...</div>
+        <div className="text-gray-600">Loading...</div>
       </div>
     );
   }
@@ -185,223 +176,102 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     );
   }
 
+  const displayDate = formatDate(schedule.date);
+  const dayName = getDayName(schedule.date);
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
+      {/* Header / Toolbar */}
+      <header className="bg-white shadow-sm sticky top-0 z-20">
+        <div className="max-w-5xl mx-auto px-4 py-3">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
-              <Link href="/" className="text-blue-600 hover:text-blue-700">
-                ← Back to Dashboard
+              <Link href="/" className="text-blue-600 hover:text-blue-700 text-sm">
+                &larr; Dashboard
               </Link>
-              <h1 className="text-2xl font-bold text-gray-900 mt-2">
-                {schedule.date} - {schedule.dayName}
+              <h1 className="text-lg font-bold text-gray-900 mt-0.5">
+                {dayName} &mdash; {displayDate}
               </h1>
             </div>
-            <div className="flex gap-3">
-              <Link
-                href={`/preview/${resolvedParams.date}`}
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
+            <div className="flex flex-wrap gap-2">
+              {/* Edit/View toggle */}
+              <button
+                onClick={() => setEditMode(!editMode)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${editMode ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
               >
-                View Grid
-              </Link>
+                {editMode ? 'Editing' : 'View Only'}
+              </button>
+
+              {/* Templates */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowTemplatePicker(!showTemplatePicker)}
+                  className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-purple-700 transition"
+                >
+                  Templates
+                </button>
+                {showTemplatePicker && (
+                  <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 w-48">
+                    {templates.length === 0 ? (
+                      <div className="p-3 text-sm text-gray-500">No templates</div>
+                    ) : (
+                      templates.map(t => (
+                        <button
+                          key={t.name}
+                          onClick={() => loadTemplate(t.name)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100 last:border-0"
+                        >
+                          {t.displayName}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Add Activity */}
+              {editMode && (
+                <button
+                  onClick={() => handleActivityAdd('07:00', '08:00', 'Jason')}
+                  className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition"
+                >
+                  + Activity
+                </button>
+              )}
+
+              {/* Print */}
               <button
                 onClick={() => openPrintableView(schedule)}
-                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition"
+                className="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition"
               >
-                Print / PDF
+                Print
               </button>
-              <button
-                onClick={saveSchedule}
-                disabled={saving}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
+
+              {/* Save */}
+              {editMode && (
+                <button
+                  onClick={saveSchedule}
+                  disabled={saving}
+                  className="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-orange-600 transition disabled:opacity-50"
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              )}
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Template Loader */}
-        <div className="bg-white rounded-lg shadow p-4 mb-6">
-          <label className="block text-sm font-medium text-gray-900 mb-2">
-            Load from Template
-          </label>
-          <div className="flex gap-3">
-            <select
-              value={selectedTemplate || ''}
-              onChange={(e) => setSelectedTemplate(e.target.value || null)}
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-            >
-              <option value="">Select a template...</option>
-              {templates.map((t) => (
-                <option key={t.name} value={t.name}>{t.displayName}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => selectedTemplate && loadTemplate(selectedTemplate)}
-              className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
-            >
-              Load Template
-            </button>
-          </div>
-        </div>
-
-        {/* Activities List */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-            <h2 className="text-lg font-semibold">Activities</h2>
-            <button
-              onClick={addActivity}
-              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
-            >
-              + Add Activity
-            </button>
-          </div>
-
-          <div className="divide-y divide-gray-200">
-            {schedule.activities.length === 0 ? (
-              <div className="p-8 text-center text-gray-900">
-                No activities yet. Add one to get started!
-              </div>
-            ) : (
-              schedule.activities.map((activity, index) => (
-                <ActivityEditor
-                  key={activity.id}
-                  activity={activity}
-                  index={index}
-                  onUpdate={(updates) => updateActivity(index, updates)}
-                  onRemove={() => removeActivity(index)}
-                />
-              ))
-            )}
-          </div>
-        </div>
+      {/* Grid */}
+      <main className="max-w-5xl mx-auto px-4 py-6">
+        <ScheduleGrid
+          schedule={schedule}
+          onActivityUpdate={handleActivityUpdate}
+          onActivityAdd={handleActivityAdd}
+          onActivityRemove={handleActivityRemove}
+          editMode={editMode}
+        />
       </main>
-    </div>
-  );
-}
-
-function ActivityEditor({
-  activity,
-  index,
-  onUpdate,
-  onRemove
-}: {
-  activity: Activity;
-  index: number;
-  onUpdate: (updates: Partial<Activity>) => void;
-  onRemove: () => void;
-}) {
-  return (
-    <div className="p-4 hover:bg-gray-50" style={{ borderLeftColor: activity.color, borderLeftWidth: '4px' }}>
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-        {/* Title */}
-        <div className="md:col-span-2">
-          <label className="block text-sm font-medium text-gray-900 mb-1">
-            Title
-          </label>
-          <input
-            type="text"
-            value={activity.title}
-            onChange={(e) => onUpdate({ title: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-          />
-        </div>
-
-        {/* Start Time */}
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-1">
-            Start
-          </label>
-          <input
-            type="time"
-            value={activity.start}
-            onChange={(e) => onUpdate({ start: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-          />
-        </div>
-
-        {/* End Time */}
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-1">
-            End
-          </label>
-          <input
-            type="time"
-            value={activity.end}
-            onChange={(e) => onUpdate({ end: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-          />
-        </div>
-
-        {/* Type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-1">
-            Type
-          </label>
-          <select
-            value={activity.type}
-            onChange={(e) => onUpdate({
-              type: e.target.value as ActivityType,
-              color: ACTIVITY_COLORS[e.target.value as ActivityType]
-            })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-          >
-            <option value="routine">Routine</option>
-            <option value="meal">Meal</option>
-            <option value="personal">Personal</option>
-            <option value="work">Work</option>
-            <option value="family">Family</option>
-            <option value="school">School</option>
-            <option value="activity">Activity</option>
-            <option value="break">Break</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-end">
-          <button
-            onClick={onRemove}
-            className="w-full bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition"
-          >
-            Remove
-          </button>
-        </div>
-      </div>
-
-      {/* People & Notes */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-1">
-            People (comma separated)
-          </label>
-          <input
-            type="text"
-            value={activity.people.join(', ')}
-            onChange={(e) => onUpdate({
-              people: e.target.value.split(',').map(p => p.trim()).filter(Boolean)
-            })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-            placeholder="Jason, Kay, Emma, Toby"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-900 mb-1">
-            Notes
-          </label>
-          <input
-            type="text"
-            value={activity.notes || ''}
-            onChange={(e) => onUpdate({ notes: e.target.value })}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900"
-          />
-        </div>
-      </div>
     </div>
   );
 }
