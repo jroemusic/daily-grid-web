@@ -15,8 +15,14 @@ import {
 } from '@/lib/time';
 
 const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
+const PERSON_COLORS: Record<string, { bg: string; border: string; dot: string }> = {
+  Jason: { bg: '#dbeafe', border: '#3b82f6', dot: '#2563eb' },
+  Kay: { bg: '#fce7f3', border: '#ec4899', dot: '#db2777' },
+  Emma: { bg: '#dcfce7', border: '#22c55e', dot: '#16a34a' },
+  Toby: { bg: '#ffedd5', border: '#f97316', dot: '#ea580c' }
+};
 const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
-  const hour = i + 7; // 7 AM to 10 PM
+  const hour = i + 7;
   return `${hour.toString().padStart(2, '0')}:00`;
 });
 
@@ -44,14 +50,12 @@ export default function ScheduleGrid({
   const [currentTime, setCurrentTime] = useState<string>('');
   const [countdown, setCountdown] = useState<string>('');
 
-  // Update current time and countdown every second
   useEffect(() => {
     function updateTime() {
       const now = new Date();
       setCurrentTime(
         `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
       );
-      // Countdown to next hour
       const minsLeft = 59 - now.getMinutes();
       const secsLeft = 59 - now.getSeconds();
       setCountdown(`${minsLeft}:${secsLeft.toString().padStart(2, '0')}`);
@@ -61,14 +65,12 @@ export default function ScheduleGrid({
     return () => clearInterval(interval);
   }, []);
 
-  // Helper: parse ISO datetime to HH:MM
   function isoToHHMM(iso: string): string {
     if (!iso.includes('T')) return iso;
     const d = new Date(iso);
     return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
   }
 
-  // Group activities by time slot and person
   const timeSlotMap = new Map<string, Map<string, { activity: Activity; index: number }>>();
   for (let i = 0; i < schedule.activities.length; i++) {
     const activity = schedule.activities[i];
@@ -81,19 +83,14 @@ export default function ScheduleGrid({
     }
   }
 
-  // Build calendar event map for grid cells — snap to hourly rows
-  // Rule: if a calendar event overlaps an hour slot by 15+ minutes, show it in that slot.
-  // This prevents sub-hour rows and keeps the grid clean.
-  const calEventRows = new Map<string, CalendarEvent>(); // key: `${hourStart}-${hourEnd}-${person}`
+  const calEventRows = new Map<string, CalendarEvent>();
   for (const event of schedule.calendarEvents || []) {
     const evtStart = timeToMinutes(isoToHHMM(event.start));
     const evtEnd = timeToMinutes(isoToHHMM(event.end));
     const person = event.person || 'Jason';
-    // Check each hourly slot
     for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
       const slotStart = timeToMinutes(TIME_SLOTS[i]);
       const slotEnd = timeToMinutes(TIME_SLOTS[i + 1]);
-      // Overlap = min(evtEnd, slotEnd) - max(evtStart, slotStart)
       const overlap = Math.min(evtEnd, slotEnd) - Math.max(evtStart, slotStart);
       if (overlap >= 15) {
         calEventRows.set(`${TIME_SLOTS[i]}-${TIME_SLOTS[i + 1]}-${person}`, event);
@@ -101,13 +98,11 @@ export default function ScheduleGrid({
     }
   }
 
-  // Build rows for hourly time slots (7 AM to 10 PM)
   const baseRows: { start: string; end: string }[] = [];
   for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
     baseRows.push({ start: TIME_SLOTS[i], end: TIME_SLOTS[i + 1] });
   }
 
-  // Also include custom time slots from activities that don't align to the hour
   const allRows = [...baseRows];
   for (const activity of schedule.activities) {
     const startMin = timeToMinutes(activity.start);
@@ -119,9 +114,7 @@ export default function ScheduleGrid({
       }
     }
   }
-  // Calendar events do NOT create sub-hour rows — they snap to hourly slots above
 
-  // Sort rows by start time and deduplicate
   allRows.sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
   const seenSlots = new Set<string>();
   const uniqueRows = allRows.filter(r => {
@@ -138,7 +131,6 @@ export default function ScheduleGrid({
       const entry = personMap.get(person);
       if (entry) return entry;
     }
-    // Check if any activity spans this time slot
     for (let i = 0; i < schedule.activities.length; i++) {
       const act = schedule.activities[i];
       const actStart = timeToMinutes(act.start);
@@ -166,90 +158,87 @@ export default function ScheduleGrid({
     }
   }
 
-  // Progress
   const completed = schedule.activities.filter(a => a.completed).length;
   const total = schedule.activities.length;
   const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-  // Next up
-  const nextActivity = currentTime
-    ? sortActivitiesByTime(schedule.activities).find(a => a.start > currentTime)
-    : null;
-
   return (
-    <div className="space-y-4">
-      {/* Progress */}
-      {total > 0 && (
-        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl p-3 text-white">
-          <div className="flex justify-between items-center font-semibold text-sm">
-            <span>Today&apos;s Progress</span>
-            <span>{completed} of {total} blocks complete</span>
-          </div>
-          <div className="bg-white/30 h-5 rounded-full mt-2 overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-green-400 to-green-500 rounded-full flex items-center justify-center text-xs font-bold text-white transition-all duration-500"
-              style={{ width: `${Math.max(percentage, 8)}%` }}
-            >
-              {percentage}%
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Next Up + Countdown */}
+    <div className="space-y-5">
+      {/* Status Bar: Countdown + Calendar Events side by side */}
       {currentTime && (
-        <div className="flex gap-3">
-          <div className="flex-1 bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-xl p-3 border-l-4 border-indigo-500 text-center">
-            <div className="font-bold text-sm text-indigo-900">Next Hour In</div>
-            <div className="text-2xl font-bold text-indigo-700 tabular-nums">{countdown}</div>
+        <div className="flex gap-4">
+          {/* Countdown */}
+          <div className="flex-shrink-0 bg-white rounded-2xl p-4 shadow-sm border border-stone-200 text-center min-w-[140px]">
+            <div className="text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1">Next Hour</div>
+            <div className="text-3xl font-bold text-stone-700 tabular-nums tracking-tight">{countdown}</div>
           </div>
-          {nextActivity && (
-            <div className="flex-1 bg-gradient-to-r from-yellow-100 to-yellow-200 rounded-xl p-3 border-l-4 border-yellow-500">
-              <div className="font-bold text-sm text-gray-800">Next Up</div>
-              <div className="font-semibold text-gray-800">
-                {nextActivity.title} ({formatTimeDisplay(nextActivity.start)} - {formatTimeDisplay(nextActivity.end)})
+
+          {/* Calendar Events (replaces Next Up) */}
+          {schedule.calendarEvents && schedule.calendarEvents.length > 0 ? (
+            <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-blue-200">
+              <div className="text-[11px] font-semibold tracking-wider uppercase text-blue-400 mb-2">Calendar</div>
+              <div className="space-y-1">
+                {schedule.calendarEvents.map((event: CalendarEvent) => {
+                  const eventTime = event.start.includes('T')
+                    ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : '';
+                  const eventEndTime = event.end.includes('T')
+                    ? new Date(event.end).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                    : '';
+                  return (
+                    <div key={event.id} className="flex items-center gap-2 text-sm">
+                      <span className="font-mono text-xs font-semibold text-blue-600 min-w-[110px]">
+                        {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime}` : ''}
+                      </span>
+                      <span className="font-semibold text-stone-800">{event.summary}</span>
+                      {event.person && <span className="text-stone-400 text-xs">({event.person})</span>}
+                      {event.location && <span className="text-stone-400 text-xs italic">@ {event.location}</span>}
+                    </div>
+                  );
+                })}
               </div>
+            </div>
+          ) : (
+            <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+              <div className="text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-2">Calendar</div>
+              <div className="text-sm text-stone-400">No events today</div>
             </div>
           )}
         </div>
       )}
-      {/* Old standalone Next Up removed */}
 
-      {/* Calendar Events */}
-      {schedule.calendarEvents && schedule.calendarEvents.length > 0 && (
-        <div className="bg-gradient-to-r from-blue-50 to-blue-100 rounded-xl p-3 border-l-4 border-blue-500">
-          <div className="font-bold text-sm text-blue-900 mb-2">Calendar Events</div>
-          {schedule.calendarEvents.map((event: CalendarEvent) => {
-            const eventTime = event.start.includes('T')
-              ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-              : '';
-            const eventEndTime = event.end.includes('T')
-              ? new Date(event.end).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-              : '';
-            return (
-              <div key={event.id} className="bg-white/70 rounded-md px-3 py-1.5 mb-1 text-sm">
-                <span className="font-bold text-blue-700 inline-block min-w-[100px]">
-                  {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime} ` : ' '}
-                </span>
-                <span className="font-semibold text-blue-900">{event.summary}</span>
-                {event.person && <span className="text-gray-500 ml-2">({event.person})</span>}
-                {event.location && <span className="text-gray-500 italic ml-2 text-xs">@ {event.location}</span>}
-              </div>
-            );
-          })}
+      {/* Progress */}
+      {total > 0 && (
+        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[11px] font-semibold tracking-wider uppercase text-stone-400">Progress</span>
+            <span className="text-sm font-semibold text-stone-600">{completed}/{total} done</span>
+          </div>
+          <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: `${percentage}%`,
+                background: percentage === 100
+                  ? '#22c55e'
+                  : 'linear-gradient(90deg, #f97316, #fb923c)'
+              }}
+            />
+          </div>
         </div>
       )}
 
-      {/* Grid Table */}
-      <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <table className="w-full border-collapse min-w-[600px]">
+      {/* Grid */}
+      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+        <table className="w-full border-collapse">
           <thead>
             <tr>
-              <th className="bg-gradient-to-r from-orange-400 to-orange-300 text-white px-2 py-2 text-center text-xs font-bold w-20">
+              <th className="bg-stone-800 text-stone-300 px-3 py-2.5 text-center text-[11px] font-semibold tracking-wider uppercase w-24">
                 Time
               </th>
               {PEOPLE.map(person => (
-                <th key={person} className="bg-gradient-to-r from-orange-400 to-orange-300 text-white px-2 py-2 text-center text-xs font-bold">
+                <th key={person} className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wider uppercase"
+                  style={{ backgroundColor: PERSON_COLORS[person].bg, color: PERSON_COLORS[person].dot }}>
                   {person}
                 </th>
               ))}
@@ -261,16 +250,18 @@ export default function ScheduleGrid({
               return (
                 <tr
                   key={`${row.start}-${row.end}`}
-                  className={`
-                    ${isCurrent ? 'bg-red-50 border-l-4 border-l-red-400 border-r-4 border-r-red-400' : ''}
-                    ${!isCurrent && rowIdx % 2 === 1 ? 'bg-gray-50' : ''}
-                    hover:bg-gray-100 transition-colors
-                  `}
+                  className={`border-b border-stone-100 last:border-0 ${
+                    isCurrent ? 'bg-orange-50' : rowIdx % 2 === 1 ? 'bg-stone-50/50' : ''
+                  }`}
                 >
-                  <td className="px-2 py-1.5 text-center text-xs font-bold text-orange-500 align-middle whitespace-nowrap">
-                    {formatTimeDisplay(row.start).replace(':00', '').replace(' ', '')} - {formatTimeDisplay(row.end).replace(':00', '').replace(' ', '')}
+                  <td className={`px-3 py-2 text-center text-xs font-semibold align-middle whitespace-nowrap ${isCurrent ? 'text-orange-600' : 'text-stone-400'}`}>
+                    <div>
+                      {formatTimeDisplay(row.start).replace(':00', '').replace(' ', '')}
+                      <span className="text-stone-300 mx-0.5">-</span>
+                      {formatTimeDisplay(row.end).replace(':00', '').replace(' ', '')}
+                    </div>
                     {isCurrent && (
-                      <span className="ml-1 bg-red-500 text-white px-1.5 py-0.5 rounded-full text-[10px] font-bold animate-pulse">
+                      <span className="inline-block mt-0.5 bg-orange-500 text-white px-1.5 py-px rounded-full text-[9px] font-bold tracking-wide animate-pulse">
                         NOW
                       </span>
                     )}
@@ -283,10 +274,11 @@ export default function ScheduleGrid({
                       return (
                         <td
                           key={person}
-                          className="px-1.5 py-1 text-center text-xs font-medium align-middle bg-blue-100 text-blue-900"
+                          className="px-2 py-2 text-center text-xs align-middle"
+                          style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}
                           title={`${calEvent.summary}${calEvent.location ? ' @ ' + calEvent.location : ''}`}
                         >
-                          <span className="leading-tight block font-bold">{calEvent.summary}</span>
+                          <span className="leading-tight block font-semibold">{calEvent.summary}</span>
                         </td>
                       );
                     }
@@ -294,11 +286,16 @@ export default function ScheduleGrid({
                       const { activity, index } = cellData;
                       const typeColor = ACTIVITY_COLORS[activity.type] || '#ffffff';
                       const isEditing = editState.active && editState.activityIndex === index;
+                      const personBorder = PERSON_COLORS[person]?.border || '#d1d5db';
                       return (
                         <td
                           key={person}
-                          className={`px-1.5 py-1 text-center text-sm font-medium align-middle cursor-pointer transition-all ${activity.completed ? 'line-through opacity-50' : ''} ${editMode ? 'hover:ring-2 hover:ring-blue-300' : ''}`}
-                          style={{ backgroundColor: typeColor, color: getTypeTextColor(activity.type) }}
+                          className={`px-2 py-1.5 text-center text-xs align-middle transition-all ${activity.completed ? 'opacity-40' : ''} ${editMode ? 'cursor-pointer hover:brightness-95' : ''}`}
+                          style={{
+                            backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
+                            color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
+                            borderLeft: `3px solid ${personBorder}`
+                          }}
                           onClick={() => editMode && setEditState({ active: true, activityIndex: index })}
                         >
                           {isEditing ? (
@@ -313,16 +310,22 @@ export default function ScheduleGrid({
                             <div className="flex items-center gap-1 justify-center">
                               <button
                                 onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
-                                className={`w-3.5 h-3.5 rounded-sm border flex-shrink-0 transition-colors ${activity.completed ? 'bg-green-500 border-green-600' : 'border-gray-400 hover:border-green-500'}`}
+                                className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center transition-all ${
+                                  activity.completed
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
+                                }`}
                                 title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
                               >
                                 {activity.completed && (
-                                  <svg viewBox="0 0 12 12" className="w-full h-full text-white" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5">
                                     <path d="M2 6l3 3 5-5" />
                                   </svg>
                                 )}
                               </button>
-                              <span className="text-xs leading-tight">{activity.title}</span>
+                              <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
+                                {activity.title}
+                              </span>
                             </div>
                           )}
                         </td>
@@ -331,11 +334,12 @@ export default function ScheduleGrid({
                     return (
                       <td
                         key={person}
-                        className={`px-1.5 py-1 text-center align-middle ${editMode ? 'cursor-pointer hover:bg-blue-50 hover:ring-1 hover:ring-blue-200' : ''}`}
+                        className={`px-2 py-2 text-center align-middle ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
+                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33` }}
                         onClick={() => handleCellClick(person, row.start, row.end)}
                       >
                         {editMode && (
-                          <span className="text-gray-300 text-xs opacity-0 hover:opacity-100 transition-opacity">+</span>
+                          <span className="text-stone-200 text-xs opacity-0 hover:opacity-100 transition-opacity text-lg leading-none">+</span>
                         )}
                       </td>
                     );
@@ -348,11 +352,11 @@ export default function ScheduleGrid({
       </div>
 
       {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs">
+      <div className="flex flex-wrap gap-3 text-xs px-1">
         {Object.entries(ACTIVITY_COLORS).map(([type, color]) => (
-          <div key={type} className="flex items-center gap-1">
-            <span className="w-4 h-4 rounded border border-gray-200" style={{ backgroundColor: color }} />
-            <span className="capitalize text-gray-600">{type}</span>
+          <div key={type} className="flex items-center gap-1.5">
+            <span className="w-3.5 h-3.5 rounded-sm border border-stone-200" style={{ backgroundColor: color }} />
+            <span className="capitalize text-stone-500">{type}</span>
           </div>
         ))}
       </div>
@@ -395,21 +399,21 @@ function InlineActivityEditor({
   }
 
   return (
-    <div className="bg-white border-2 border-blue-400 rounded-lg p-2 shadow-lg text-left" onClick={e => e.stopPropagation()}>
+    <div className="bg-white rounded-xl p-3 shadow-xl border-2 border-stone-300 text-left" onClick={e => e.stopPropagation()}>
       <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-        className="w-full border border-gray-300 rounded px-2 py-1 text-sm mb-1" placeholder="Activity title" autoFocus
+        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:border-stone-500 focus:ring-1 focus:ring-stone-300 outline-none" placeholder="Activity title" autoFocus
         onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
       />
-      <button onClick={() => setExpanded(!expanded)} className="text-xs text-blue-600 underline mb-1">
-        {expanded ? 'Less...' : 'More...'}
+      <button onClick={() => setExpanded(!expanded)} className="text-xs text-stone-500 hover:text-stone-700 mb-2 font-medium">
+        {expanded ? '- Less options' : '+ Time, type, people...'}
       </button>
       {expanded && (
-        <div className="space-y-1 mt-1">
-          <div className="flex gap-1">
-            <input type="time" value={start} onChange={e => setStart(e.target.value)} className="border border-gray-300 rounded px-1 py-0.5 text-xs flex-1" />
-            <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="border border-gray-300 rounded px-1 py-0.5 text-xs flex-1" />
+        <div className="space-y-1.5 mt-1 mb-2">
+          <div className="flex gap-1.5">
+            <input type="time" value={start} onChange={e => setStart(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1 text-xs flex-1 focus:border-stone-500 outline-none" />
+            <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1 text-xs flex-1 focus:border-stone-500 outline-none" />
           </div>
-          <select value={type} onChange={e => setType(e.target.value as ActivityType)} className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs">
+          <select value={type} onChange={e => setType(e.target.value as ActivityType)} className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:border-stone-500 outline-none">
             <option value="routine">Routine</option><option value="meal">Meal</option>
             <option value="personal">Personal</option><option value="work">Work</option>
             <option value="family">Family</option><option value="school">School</option>
@@ -417,15 +421,15 @@ function InlineActivityEditor({
             <option value="other">Other</option>
           </select>
           <input type="text" value={people} onChange={e => setPeople(e.target.value)}
-            className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs" placeholder="Jason, Kay, Emma, Toby" />
+            className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:border-stone-500 outline-none" placeholder="Jason, Kay, Emma, Toby" />
           <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-            className="w-full border border-gray-300 rounded px-1 py-0.5 text-xs" placeholder="Notes" />
+            className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:border-stone-500 outline-none" placeholder="Notes" />
         </div>
       )}
-      <div className="flex gap-1 mt-1">
-        <button onClick={handleSave} className="bg-blue-600 text-white px-2 py-0.5 rounded text-xs font-semibold">Save</button>
-        <button onClick={onClose} className="bg-gray-300 text-gray-700 px-2 py-0.5 rounded text-xs">Cancel</button>
-        <button onClick={() => { onRemove(index); onClose(); }} className="bg-red-500 text-white px-2 py-0.5 rounded text-xs ml-auto">Delete</button>
+      <div className="flex gap-1.5">
+        <button onClick={handleSave} className="bg-stone-800 text-white px-3 py-1 rounded-lg text-xs font-semibold hover:bg-stone-700">Save</button>
+        <button onClick={onClose} className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-xs font-medium hover:bg-stone-200">Cancel</button>
+        <button onClick={() => { onRemove(index); onClose(); }} className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-100 ml-auto">Delete</button>
       </div>
     </div>
   );

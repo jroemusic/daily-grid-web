@@ -242,46 +242,46 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const dayName = getDayName(schedule.date);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-stone-100">
       {/* Header / Toolbar */}
-      <header className="bg-white shadow-sm sticky top-0 z-20">
+      <header className="bg-white border-b border-stone-200 sticky top-0 z-20">
         <div className="max-w-5xl mx-auto px-4 py-3">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
             <div>
-              <Link href="/" className="text-blue-600 hover:text-blue-700 text-sm">
+              <Link href="/" className="text-stone-400 hover:text-stone-600 text-xs font-medium tracking-wide">
                 &larr; Dashboard
               </Link>
-              <h1 className="text-lg font-bold text-gray-900 mt-0.5">
-                {dayName} &mdash; {displayDate}
+              <h1 className="text-xl font-bold text-stone-800 mt-0.5 tracking-tight">
+                {dayName} <span className="text-stone-400 font-normal">&mdash;</span> <span className="text-stone-600">{displayDate}</span>
               </h1>
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {/* Edit/View toggle */}
               <button
                 onClick={() => setEditMode(!editMode)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${editMode ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'}`}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition ${editMode ? 'bg-stone-800 text-white' : 'bg-stone-200 text-stone-600'}`}
               >
-                {editMode ? 'Editing' : 'View Only'}
+                {editMode ? 'EDITING' : 'VIEW'}
               </button>
 
               {/* Templates */}
               <div className="relative">
                 <button
                   onClick={() => setShowTemplatePicker(!showTemplatePicker)}
-                  className="bg-purple-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-purple-700 transition"
+                  className="bg-stone-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-stone-600 transition"
                 >
-                  Templates
+                  TEMPLATES
                 </button>
                 {showTemplatePicker && (
-                  <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 w-48">
+                  <div className="absolute right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-30 w-48 overflow-hidden">
                     {templates.length === 0 ? (
-                      <div className="p-3 text-sm text-gray-500">No templates</div>
+                      <div className="p-3 text-sm text-stone-400">No templates</div>
                     ) : (
                       templates.map(t => (
                         <button
                           key={t.name}
                           onClick={() => loadTemplate(t.name)}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-purple-50 border-b border-gray-100 last:border-0"
+                          className="w-full text-left px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 border-b border-stone-100 last:border-0 transition"
                         >
                           {t.displayName}
                         </button>
@@ -295,26 +295,26 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
               {editMode && (
                 <button
                   onClick={() => handleActivityAdd('07:00', '08:00', 'Jason')}
-                  className="bg-green-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition"
+                  className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-emerald-700 transition"
                 >
-                  + Activity
+                  + ACTIVITY
                 </button>
               )}
 
               {/* Refresh Calendar */}
               <button
                 onClick={refreshCalendar}
-                className="bg-cyan-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-cyan-700 transition"
+                className="bg-sky-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-sky-700 transition"
               >
-                Refresh Cal
+                SYNC CAL
               </button>
 
               {/* Print */}
               <button
                 onClick={() => openPrintableView(schedule)}
-                className="bg-gray-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-gray-700 transition"
+                className="bg-stone-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-stone-600 transition"
               >
-                Print
+                PRINT
               </button>
 
               {/* Save */}
@@ -322,9 +322,9 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
                 <button
                   onClick={saveSchedule}
                   disabled={saving}
-                  className="bg-orange-500 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-orange-600 transition disabled:opacity-50"
+                  className="bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-orange-700 transition disabled:opacity-50"
                 >
-                  {saving ? 'Saving...' : 'Save'}
+                  {saving ? 'SAVING...' : 'SAVE'}
                 </button>
               )}
 
@@ -333,27 +333,27 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
                 <div className="relative">
                   <button
                     onClick={() => setShowSaveTemplate(!showSaveTemplate)}
-                    className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-700 transition"
+                    className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-amber-700 transition"
                   >
-                    Save as Template
+                    SAVE TEMPLATE
                   </button>
                   {showSaveTemplate && (
-                    <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 p-3 w-56">
+                    <div className="absolute right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-30 p-3 w-56">
                       <input
                         type="text"
                         value={templateName}
                         onChange={e => setTemplateName(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter') saveAsTemplate(); if (e.key === 'Escape') setShowSaveTemplate(false); }}
-                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm mb-2"
+                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:border-stone-500 outline-none"
                         placeholder="Template name..."
                         autoFocus
                       />
                       <button
                         onClick={saveAsTemplate}
                         disabled={!templateName.trim()}
-                        className="w-full bg-purple-600 text-white px-2 py-1 rounded text-sm font-semibold disabled:opacity-50"
+                        className="w-full bg-stone-800 text-white px-2 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 hover:bg-stone-700 transition"
                       >
-                        Save
+                        SAVE TEMPLATE
                       </button>
                     </div>
                   )}
@@ -365,7 +365,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       </header>
 
       {/* Grid */}
-      <main className="max-w-5xl mx-auto px-4 py-6">
+      <main className="max-w-5xl mx-auto px-4 py-5">
         <ScheduleGrid
           schedule={schedule}
           onActivityUpdate={handleActivityUpdate}
