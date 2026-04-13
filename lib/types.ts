@@ -31,8 +31,36 @@ export interface Schedule {
   activities: Activity[];
   calendarEvents?: CalendarEvent[];
   reminders?: Reminder[];
+  meals?: Meal[]; // Meal plan for the day
+  calorieSummary?: CalorieSummary; // Jason's calorie tracking
   created_at?: string;
   updated_at?: string;
+}
+
+export interface Meal {
+  id: string;
+  date: string;
+  mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  person: 'Jason' | 'Kay' | 'Emma' | 'Toby' | 'Family';
+  name: string;
+  description?: string;
+  calories?: number;
+  protein?: number;
+  carbs?: number;
+  fat?: number;
+  planned: boolean;
+  consumed: boolean;
+}
+
+export interface CalorieSummary {
+  date: string;
+  person: 'Jason' | 'Kay' | 'Emma' | 'Toby';
+  targetCalories: number;
+  totalPlanned: number;
+  totalConsumed: number;
+  totalProtein: number;
+  totalCarbs: number;
+  totalFat: number;
 }
 
 export interface Template {

@@ -135,6 +135,25 @@ function calculateCompletion(activities: any[]): { completed: number; total: num
 }
 
 /**
+ * Format Google Calendar event time for display
+ */
+function formatEventTime(dateTime: string): string {
+  try {
+    // Parse ISO 8601 datetime string (e.g., "2026-03-18T09:30:00-04:00")
+    const date = new Date(dateTime);
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const hours12 = hours % 12 || 12;
+    const minutesStr = minutes.toString().padStart(2, '0');
+    return `${hours12}:${minutesStr} ${ampm}`;
+  } catch (error) {
+    console.warn('Failed to parse event time:', dateTime, error);
+    return '';
+  }
+}
+
+/**
  * Get color-coded class based on activity type/color
  */
 function getBlockTypeClass(activity: any): string {
@@ -264,6 +283,129 @@ export function generatePrintableHTML(schedule: Schedule): string {
         font-size: 12pt;
         color: #2d3436;
         font-weight: 600;
+      }
+
+      /* Calendar Events Section */
+      .calendar-events {
+        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+        padding: 12px 20px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        border-left: 5px solid #2196f3;
+      }
+      .calendar-events h3 {
+        font-size: 13pt;
+        color: #0d47a1;
+        margin-bottom: 8px;
+        font-weight: 700;
+      }
+      .calendar-event {
+        background: rgba(255, 255, 255, 0.7);
+        padding: 8px 12px;
+        margin-bottom: 6px;
+        border-radius: 6px;
+        font-size: 11pt;
+      }
+      .calendar-event:last-child {
+        margin-bottom: 0;
+      }
+      .calendar-event-time {
+        font-weight: 700;
+        color: #1976d2;
+        display: inline-block;
+        min-width: 100px;
+      }
+      .calendar-event-title {
+        color: #0d47a1;
+        font-weight: 600;
+      }
+      .calendar-event-location {
+        color: #424242;
+        font-size: 10pt;
+        font-style: italic;
+      }
+
+      /* Meal Planning Section */
+      .meal-planning {
+        background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+        padding: 12px 20px;
+        border-radius: 12px;
+        margin-bottom: 16px;
+        border-left: 5px solid #ff9800;
+      }
+      .meal-planning h3 {
+        font-size: 13pt;
+        color: #e65100;
+        margin-bottom: 8px;
+        font-weight: 700;
+      }
+      .meal-section {
+        margin-bottom: 12px;
+      }
+      .meal-section:last-child {
+        margin-bottom: 0;
+      }
+      .meal-section-title {
+        font-size: 11pt;
+        font-weight: 700;
+        color: #e65100;
+        margin-bottom: 4px;
+      }
+      .meal-item {
+        background: rgba(255, 255, 255, 0.7);
+        padding: 6px 10px;
+        margin-bottom: 4px;
+        border-radius: 6px;
+        font-size: 10pt;
+      }
+      .meal-item:last-child {
+        margin-bottom: 0;
+      }
+      .meal-name {
+        font-weight: 600;
+        color: #424242;
+      }
+      .meal-calories {
+        color: #1976d2;
+        font-size: 9pt;
+        font-weight: 600;
+      }
+      .meal-macros {
+        color: #666;
+        font-size: 8pt;
+      }
+      .calorie-tracker {
+        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        padding: 10px 16px;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        border-left: 4px solid #4caf50;
+      }
+      .calorie-tracker h4 {
+        font-size: 11pt;
+        color: #1b5e20;
+        margin-bottom: 6px;
+        font-weight: 700;
+      }
+      .calorie-stats {
+        display: flex;
+        gap: 12px;
+        font-size: 10pt;
+      }
+      .calorie-stat {
+        background: rgba(255, 255, 255, 0.8);
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-weight: 600;
+      }
+      .calorie-stat.target {
+        color: #2e7d32;
+      }
+      .calorie-stat.consumed {
+        color: #1565c0;
+      }
+      .calorie-stat.remaining {
+        color: #c62828;
       }
 
       /* Table */
@@ -488,6 +630,67 @@ export function generatePrintableHTML(schedule: Schedule): string {
           <h3>⏰ Next Up</h3>
           <div class="next-up-content" id="nextUpContent"></div>
         </div>
+
+        <!-- Calendar Events Section -->
+        ${schedule.calendarEvents && schedule.calendarEvents.length > 0 ? `
+        <div class="calendar-events">
+          <h3>📅 Calendar Events</h3>
+          ${schedule.calendarEvents.map((event: any) => {
+            const eventTime = formatEventTime(event.start);
+            const eventEndTime = formatEventTime(event.end);
+            return `
+              <div class="calendar-event">
+                <span class="calendar-event-time">${eventTime}${eventEndTime !== eventTime ? ' - ' + eventEndTime : ''}</span>
+                <span class="calendar-event-title">${event.summary || 'No title'}</span>
+                ${event.location ? `<span class="calendar-event-location"> @ ${event.location}</span>` : ''}
+              </div>
+            `;
+          }).join('')}
+        </div>
+        ` : ''}
+
+        <!-- Meal Planning Section -->
+        ${schedule.meals && schedule.meals.length > 0 ? `
+        <div class="meal-planning">
+          <h3>🍽️ Meal Plan</h3>
+
+          ${schedule.calorieSummary ? `
+          <div class="calorie-tracker">
+            <h4>Jason's Calories</h4>
+            <div class="calorie-stats">
+              <span class="calorie-stat target">Target: ${schedule.calorieSummary.targetCalories}</span>
+              <span class="calorie-stat consumed">Consumed: ${schedule.calorieSummary.totalConsumed}</span>
+              <span class="calorie-stat remaining">Remaining: ${schedule.calorieSummary.targetCalories - schedule.calorieSummary.totalConsumed}</span>
+            </div>
+          </div>
+          ` : ''}
+
+          ${['breakfast', 'lunch', 'dinner', 'snack'].map(mealType => {
+            const mealsForType = schedule.meals!.filter((m: any) => m.mealType === mealType);
+            if (mealsForType.length === 0) return '';
+
+            const mealIcons: Record<string, string> = {
+              breakfast: '🌅',
+              lunch: '☀️',
+              dinner: '🌙',
+              snack: '🍎'
+            };
+
+            return `
+              <div class="meal-section">
+                <div class="meal-section-title">${mealIcons[mealType] || '🍽️'} ${mealType.charAt(0).toUpperCase() + mealType.slice(1)}</div>
+                ${mealsForType.map((meal: any) => `
+                  <div class="meal-item">
+                    <span class="meal-name">${meal.name}</span>
+                    ${meal.calories ? `<span class="meal-calories"> | ${meal.calories} cal</span>` : ''}
+                    ${meal.protein ? `<span class="meal-macros"> (P: ${meal.protein}g, C: ${meal.carbs}g, F: ${meal.fat}g)</span>` : ''}
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }).join('')}
+        </div>
+        ` : ''}
 
         <table>
           <thead>
