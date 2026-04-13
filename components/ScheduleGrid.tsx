@@ -74,13 +74,24 @@ export default function ScheduleGrid({
     }
   }
 
-  // Build calendar event map for grid cells
-  const calEventMap = new Map<string, CalendarEvent>();
+  // Build calendar event map for grid cells — snap to hourly rows
+  // Rule: if a calendar event overlaps an hour slot by 15+ minutes, show it in that slot.
+  // This prevents sub-hour rows and keeps the grid clean.
+  const calEventRows = new Map<string, CalendarEvent>(); // key: `${hourStart}-${hourEnd}-${person}`
   for (const event of schedule.calendarEvents || []) {
-    const evtStart = isoToHHMM(event.start);
-    const evtEnd = isoToHHMM(event.end);
+    const evtStart = timeToMinutes(isoToHHMM(event.start));
+    const evtEnd = timeToMinutes(isoToHHMM(event.end));
     const person = event.person || 'Jason';
-    calEventMap.set(`${evtStart}-${evtEnd}-${person}`, event);
+    // Check each hourly slot
+    for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
+      const slotStart = timeToMinutes(TIME_SLOTS[i]);
+      const slotEnd = timeToMinutes(TIME_SLOTS[i + 1]);
+      // Overlap = min(evtEnd, slotEnd) - max(evtStart, slotStart)
+      const overlap = Math.min(evtEnd, slotEnd) - Math.max(evtStart, slotStart);
+      if (overlap >= 15) {
+        calEventRows.set(`${TIME_SLOTS[i]}-${TIME_SLOTS[i + 1]}-${person}`, event);
+      }
+    }
   }
 
   // Build rows for hourly time slots (7 AM to 10 PM)
@@ -89,7 +100,7 @@ export default function ScheduleGrid({
     baseRows.push({ start: TIME_SLOTS[i], end: TIME_SLOTS[i + 1] });
   }
 
-  // Also include custom time slots from activities and calendar events that don't align to the hour
+  // Also include custom time slots from activities that don't align to the hour
   const allRows = [...baseRows];
   for (const activity of schedule.activities) {
     const startMin = timeToMinutes(activity.start);
@@ -101,18 +112,7 @@ export default function ScheduleGrid({
       }
     }
   }
-  for (const event of schedule.calendarEvents || []) {
-    const evtStart = isoToHHMM(event.start);
-    const evtEnd = isoToHHMM(event.end);
-    const startMin = timeToMinutes(evtStart);
-    const endMin = timeToMinutes(evtEnd);
-    if (startMin % 60 !== 0 || endMin % 60 !== 0) {
-      const key = `${evtStart}-${evtEnd}`;
-      if (!allRows.some(r => `${r.start}-${r.end}` === key)) {
-        allRows.push({ start: evtStart, end: evtEnd });
-      }
-    }
-  }
+  // Calendar events do NOT create sub-hour rows — they snap to hourly slots above
 
   // Sort rows by start time and deduplicate
   allRows.sort((a, b) => timeToMinutes(a.start) - timeToMinutes(b.start));
@@ -146,19 +146,7 @@ export default function ScheduleGrid({
   }
 
   function getCalEvent(person: string, rowStart: string, rowEnd: string): CalendarEvent | null {
-    // Exact match
-    const exact = calEventMap.get(`${rowStart}-${rowEnd}-${person}`);
-    if (exact) return exact;
-    // Span match
-    for (const event of schedule.calendarEvents || []) {
-      if (event.person !== person) continue;
-      const evtStart = timeToMinutes(isoToHHMM(event.start));
-      const evtEnd = timeToMinutes(isoToHHMM(event.end));
-      const rowStartMin = timeToMinutes(rowStart);
-      const rowEndMin = timeToMinutes(rowEnd);
-      if (evtStart <= rowStartMin && evtEnd >= rowEndMin) return event;
-    }
-    return null;
+    return calEventRows.get(`${rowStart}-${rowEnd}-${person}`) || null;
   }
 
   function handleCellClick(person: string, rowStart: string, rowEnd: string) {
