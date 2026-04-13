@@ -54,6 +54,13 @@ export default function ScheduleGrid({
     return () => clearInterval(interval);
   }, []);
 
+  // Helper: parse ISO datetime to HH:MM
+  function isoToHHMM(iso: string): string {
+    if (!iso.includes('T')) return iso;
+    const d = new Date(iso);
+    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+  }
+
   // Group activities by time slot and person
   const timeSlotMap = new Map<string, Map<string, { activity: Activity; index: number }>>();
   for (let i = 0; i < schedule.activities.length; i++) {
@@ -67,13 +74,22 @@ export default function ScheduleGrid({
     }
   }
 
+  // Build calendar event map for grid cells
+  const calEventMap = new Map<string, CalendarEvent>();
+  for (const event of schedule.calendarEvents || []) {
+    const evtStart = isoToHHMM(event.start);
+    const evtEnd = isoToHHMM(event.end);
+    const person = event.person || 'Jason';
+    calEventMap.set(`${evtStart}-${evtEnd}-${person}`, event);
+  }
+
   // Build rows for hourly time slots (7 AM to 10 PM)
   const baseRows: { start: string; end: string }[] = [];
   for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
     baseRows.push({ start: TIME_SLOTS[i], end: TIME_SLOTS[i + 1] });
   }
 
-  // Also include custom time slots from activities that don't align to the hour
+  // Also include custom time slots from activities and calendar events that don't align to the hour
   const allRows = [...baseRows];
   for (const activity of schedule.activities) {
     const startMin = timeToMinutes(activity.start);
@@ -82,6 +98,18 @@ export default function ScheduleGrid({
       const key = `${activity.start}-${activity.end}`;
       if (!allRows.some(r => `${r.start}-${r.end}` === key)) {
         allRows.push({ start: activity.start, end: activity.end });
+      }
+    }
+  }
+  for (const event of schedule.calendarEvents || []) {
+    const evtStart = isoToHHMM(event.start);
+    const evtEnd = isoToHHMM(event.end);
+    const startMin = timeToMinutes(evtStart);
+    const endMin = timeToMinutes(evtEnd);
+    if (startMin % 60 !== 0 || endMin % 60 !== 0) {
+      const key = `${evtStart}-${evtEnd}`;
+      if (!allRows.some(r => `${r.start}-${r.end}` === key)) {
+        allRows.push({ start: evtStart, end: evtEnd });
       }
     }
   }
@@ -113,6 +141,22 @@ export default function ScheduleGrid({
       if (actStart <= rowStartMin && actEnd >= rowEndMin && act.people.includes(person)) {
         return { activity: act, index: i };
       }
+    }
+    return null;
+  }
+
+  function getCalEvent(person: string, rowStart: string, rowEnd: string): CalendarEvent | null {
+    // Exact match
+    const exact = calEventMap.get(`${rowStart}-${rowEnd}-${person}`);
+    if (exact) return exact;
+    // Span match
+    for (const event of schedule.calendarEvents || []) {
+      if (event.person !== person) continue;
+      const evtStart = timeToMinutes(isoToHHMM(event.start));
+      const evtEnd = timeToMinutes(isoToHHMM(event.end));
+      const rowStartMin = timeToMinutes(rowStart);
+      const rowEndMin = timeToMinutes(rowEnd);
+      if (evtStart <= rowStartMin && evtEnd >= rowEndMin) return event;
     }
     return null;
   }
@@ -251,6 +295,19 @@ export default function ScheduleGrid({
                           ) : (
                             <span className="text-xs leading-tight block">{activity.title}</span>
                           )}
+                        </td>
+                      );
+                    }
+                    // Check for calendar event
+                    const calEvent = getCalEvent(person, row.start, row.end);
+                    if (calEvent) {
+                      return (
+                        <td
+                          key={person}
+                          className="px-1.5 py-1 text-center text-xs font-medium align-middle bg-blue-100 text-blue-900"
+                          title={`${calEvent.summary}${calEvent.location ? ' @ ' + calEvent.location : ''}`}
+                        >
+                          <span className="leading-tight block">{calEvent.summary}</span>
                         </td>
                       );
                     }

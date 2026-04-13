@@ -71,6 +71,19 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     }
   }
 
+  async function refreshCalendar() {
+    if (!schedule) return;
+    try {
+      const calendarRes = await fetch(`/api/google-calendar/${schedule.date}`);
+      if (calendarRes.ok) {
+        const calendarData = await calendarRes.json();
+        setSchedule({ ...schedule, calendarEvents: calendarData.events || [] });
+      }
+    } catch (e) {
+      console.warn('Failed to refresh calendar events:', e);
+    }
+  }
+
   async function saveSchedule() {
     if (!schedule) return;
     setSaving(true);
@@ -238,6 +251,14 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
                   + Activity
                 </button>
               )}
+
+              {/* Refresh Calendar */}
+              <button
+                onClick={refreshCalendar}
+                className="bg-cyan-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-cyan-700 transition"
+              >
+                Refresh Cal
+              </button>
 
               {/* Print */}
               <button
