@@ -213,7 +213,7 @@ export default function ScheduleGrid({
             return (
               <div key={event.id} className="bg-white/70 rounded-md px-3 py-1.5 mb-1 text-sm">
                 <span className="font-bold text-blue-700 inline-block min-w-[100px]">
-                  {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime}` : ''}
+                  {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime} ` : ' '}
                 </span>
                 <span className="font-semibold text-blue-900">{event.summary}</span>
                 {event.person && <span className="text-gray-500 ml-2">({event.person})</span>}
@@ -261,6 +261,19 @@ export default function ScheduleGrid({
                   </td>
                   {PEOPLE.map(person => {
                     const cellData = getCellContent(person, row.start, row.end);
+                    const calEvent = getCalEvent(person, row.start, row.end);
+                    // Calendar events take priority
+                    if (calEvent) {
+                      return (
+                        <td
+                          key={person}
+                          className="px-1.5 py-1 text-center text-xs font-medium align-middle bg-blue-100 text-blue-900"
+                          title={`${calEvent.summary}${calEvent.location ? ' @ ' + calEvent.location : ''}`}
+                        >
+                          <span className="leading-tight block font-bold">{calEvent.summary}</span>
+                        </td>
+                      );
+                    }
                     if (cellData) {
                       const { activity, index } = cellData;
                       const typeColor = ACTIVITY_COLORS[activity.type] || '#ffffff';
@@ -283,19 +296,6 @@ export default function ScheduleGrid({
                           ) : (
                             <span className="text-xs leading-tight block">{activity.title}</span>
                           )}
-                        </td>
-                      );
-                    }
-                    // Check for calendar event
-                    const calEvent = getCalEvent(person, row.start, row.end);
-                    if (calEvent) {
-                      return (
-                        <td
-                          key={person}
-                          className="px-1.5 py-1 text-center text-xs font-medium align-middle bg-blue-100 text-blue-900"
-                          title={`${calEvent.summary}${calEvent.location ? ' @ ' + calEvent.location : ''}`}
-                        >
-                          <span className="leading-tight block">{calEvent.summary}</span>
                         </td>
                       );
                     }
