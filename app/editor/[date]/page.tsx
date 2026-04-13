@@ -219,7 +219,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
                         <button
                           key={t.name}
                           onClick={() => loadTemplate(t.name)}
-                          className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 border-b border-gray-100 last:border-0"
+                          className="w-full text-left px-3 py-2 text-sm text-gray-900 hover:bg-purple-50 border-b border-gray-100 last:border-0"
                         >
                           {t.displayName}
                         </button>
