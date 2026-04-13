@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, useCallback } from 'react';
+import { useEffect, useState, use, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { Schedule, Activity, ActivityType, ACTIVITY_COLORS } from '@/lib/types';
 import { getDayName, getTodayDate } from '@/lib/time';
@@ -13,6 +13,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(true);
+  const [triggerNewActivity, setTriggerNewActivity] = useState(0);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templates, setTemplates] = useState<{ name: string; displayName: string }[]>([]);
 
@@ -372,7 +373,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
               {/* Add Activity */}
               {editMode && (
                 <button
-                  onClick={() => handleActivityAdd('07:00', '08:00', 'Jason')}
+                  onClick={() => setTriggerNewActivity(n => n + 1)}
                   className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-emerald-700 transition"
                 >
                   + ACTIVITY
@@ -452,6 +453,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           onToggleComplete={handleToggleComplete}
           onCalendarEventOverride={handleCalendarEventOverride}
           editMode={editMode}
+          triggerNewActivity={triggerNewActivity}
         />
       </main>
     </div>

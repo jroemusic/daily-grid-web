@@ -34,6 +34,7 @@ interface ScheduleGridProps {
   onToggleComplete: (index: number) => void;
   onCalendarEventOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
   editMode: boolean;
+  triggerNewActivity?: number; // increment to open new activity modal
 }
 
 export default function ScheduleGrid({
@@ -43,13 +44,15 @@ export default function ScheduleGrid({
   onActivityRemove,
   onToggleComplete,
   onCalendarEventOverride,
-  editMode
+  editMode,
+  triggerNewActivity
 }: ScheduleGridProps) {
   const [editState, setEditState] = useState<{
     active: boolean;
     activityIndex: number;
-  }>({ active: false, activityIndex: -1 });
-  const [currentTime, setCurrentTime] = useState<string>('');
+    isNew: boolean;
+    defaults: { start: string; end: string; person: string } | null;
+  }>({ active: false, activityIndex: -1, isNew: false, defaults: null });  const [currentTime, setCurrentTime] = useState<string>('');
   const [countdown, setCountdown] = useState<string>('');
 
   useEffect(() => {
@@ -66,6 +69,13 @@ export default function ScheduleGrid({
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Respond to external "new activity" trigger
+  useEffect(() => {
+    if (triggerNewActivity && triggerNewActivity > 0) {
+      setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: '07:00', end: '08:00', person: 'Jason' } });
+    }
+  }, [triggerNewActivity]);
 
   function isoToHHMM(iso: string): string {
     if (!iso.includes('T')) return iso;
@@ -165,10 +175,15 @@ export default function ScheduleGrid({
     if (!editMode) return;
     const existing = getCellContent(person, rowStart, rowEnd);
     if (existing) {
-      setEditState({ active: true, activityIndex: existing.index });
+      setEditState({ active: true, activityIndex: existing.index, isNew: false, defaults: null });
     } else {
-      onActivityAdd(rowStart, rowEnd, person);
+      setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: rowStart, end: rowEnd, person } });
     }
+  }
+
+  /** Called from parent to open modal for new activity */
+  function openNewActivityModal() {
+    setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: '07:00', end: '08:00', person: 'Jason' } });
   }
 
   const completed = schedule.activities.filter(a => a.completed).length;
@@ -335,7 +350,6 @@ export default function ScheduleGrid({
                     if (cellData) {
                       const { activity, index } = cellData;
                       const typeColor = ACTIVITY_COLORS[activity.type] || '#ffffff';
-                      const isEditing = editState.active && editState.activityIndex === index;
                       const personBorder = PERSON_COLORS[person]?.border || '#d1d5db';
                       return (
                         <td
@@ -346,38 +360,28 @@ export default function ScheduleGrid({
                             color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
                             borderLeft: `3px solid ${personBorder}`
                           }}
-                          onClick={() => editMode && setEditState({ active: true, activityIndex: index })}
+                          onClick={() => editMode && handleCellClick(person, row.start, row.end)}
                         >
-                          {isEditing ? (
-                            <InlineActivityEditor
-                              activity={activity}
-                              index={index}
-                              onUpdate={onActivityUpdate}
-                              onRemove={onActivityRemove}
-                              onClose={() => setEditState({ active: false, activityIndex: -1 })}
-                            />
-                          ) : (
-                            <div className="flex items-center gap-1 justify-center">
-                              <button
-                                onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
-                                className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center transition-all ${
-                                  activity.completed
-                                    ? 'bg-green-500 text-white'
-                                    : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
-                                }`}
-                                title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
-                              >
-                                {activity.completed && (
-                                  <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <path d="M2 6l3 3 5-5" />
-                                  </svg>
-                                )}
-                              </button>
-                              <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
-                                {activity.title}
-                              </span>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-1 justify-center">
+                            <button
+                              onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
+                              className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center transition-all ${
+                                activity.completed
+                                  ? 'bg-green-500 text-white'
+                                  : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
+                              }`}
+                              title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
+                            >
+                              {activity.completed && (
+                                <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <path d="M2 6l3 3 5-5" />
+                                </svg>
+                              )}
+                            </button>
+                            <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
+                              {activity.title}
+                            </span>
+                          </div>
                         </td>
                       );
                     }
@@ -410,6 +414,18 @@ export default function ScheduleGrid({
           </div>
         ))}
       </div>
+
+      {/* Activity Modal */}
+      {editState.active && (
+        <ActivityModal
+          schedule={schedule}
+          editState={editState}
+          onUpdate={onActivityUpdate}
+          onAdd={onActivityAdd}
+          onRemove={onActivityRemove}
+          onClose={() => setEditState({ active: false, activityIndex: -1, isNew: false, defaults: null })}
+        />
+      )}
     </div>
   );
 }
@@ -422,64 +438,181 @@ function getTypeTextColor(type: ActivityType): string {
   return textColors[type] || '#212121';
 }
 
-function InlineActivityEditor({
-  activity, index, onUpdate, onRemove, onClose
+const TYPE_LABELS: Record<ActivityType, string> = {
+  routine: 'Routine', meal: 'Meal', personal: 'Personal', work: 'Work',
+  family: 'Family', school: 'School', activity: 'Activity', break: 'Break', other: 'Other'
+};
+
+function ActivityModal({
+  schedule,
+  editState,
+  onUpdate,
+  onAdd,
+  onRemove,
+  onClose
 }: {
-  activity: Activity; index: number;
+  schedule: Schedule;
+  editState: { active: boolean; activityIndex: number; isNew: boolean; defaults: { start: string; end: string; person: string } | null };
   onUpdate: (index: number, updates: Partial<Activity>) => void;
+  onAdd: (start: string, end: string, person: string) => void;
   onRemove: (index: number) => void;
   onClose: () => void;
 }) {
-  const [title, setTitle] = useState(activity.title);
-  const [start, setStart] = useState(activity.start);
-  const [end, setEnd] = useState(activity.end);
-  const [type, setType] = useState<ActivityType>(activity.type);
-  const [people, setPeople] = useState(activity.people.join(', '));
-  const [notes, setNotes] = useState(activity.notes || '');
-  const [expanded, setExpanded] = useState(false);
+  const existing = !editState.isNew && editState.activityIndex >= 0 ? schedule.activities[editState.activityIndex] : null;
+
+  const [title, setTitle] = useState(existing?.title || '');
+  const [start, setStart] = useState(existing?.start || editState.defaults?.start || '07:00');
+  const [end, setEnd] = useState(existing?.end || editState.defaults?.end || '08:00');
+  const [type, setType] = useState<ActivityType>(existing?.type || 'other');
+  const [selectedPeople, setSelectedPeople] = useState<string[]>(
+    existing?.people || (editState.defaults?.person ? [editState.defaults.person] : ['Jason'])
+  );
+  const [notes, setNotes] = useState(existing?.notes || '');
+
+  function togglePerson(person: string) {
+    setSelectedPeople(prev => {
+      if (prev.includes(person)) {
+        if (prev.length === 1) return prev; // must keep at least 1
+        return prev.filter(p => p !== person);
+      }
+      return [...prev, person];
+    });
+  }
 
   function handleSave() {
-    onUpdate(index, {
-      title, start, end, type,
-      color: ACTIVITY_COLORS[type],
-      people: people.split(',').map(p => p.trim()).filter(Boolean),
-      notes
-    });
+    if (!title.trim()) return;
+    if (editState.isNew) {
+      onAdd(start, end, selectedPeople[0] || 'Jason');
+      // After adding, update with full details
+      // The add creates a basic activity, then we update the last one
+      const newIdx = schedule.activities.length; // will be the new index
+      setTimeout(() => {
+        onUpdate(newIdx, {
+          title: title.trim(), start, end, type,
+          color: ACTIVITY_COLORS[type],
+          people: selectedPeople,
+          notes
+        });
+      }, 50);
+    } else {
+      onUpdate(editState.activityIndex, {
+        title: title.trim(), start, end, type,
+        color: ACTIVITY_COLORS[type],
+        people: selectedPeople,
+        notes
+      });
+    }
     onClose();
   }
 
   return (
-    <div className="bg-white rounded-xl p-3 shadow-xl border-2 border-stone-300 text-left" onClick={e => e.stopPropagation()}>
-      <input type="text" value={title} onChange={e => setTitle(e.target.value)}
-        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:border-stone-500 focus:ring-1 focus:ring-stone-300 outline-none" placeholder="Activity title" autoFocus
-        onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') onClose(); }}
-      />
-      <button onClick={() => setExpanded(!expanded)} className="text-xs text-stone-500 hover:text-stone-700 mb-2 font-medium">
-        {expanded ? '- Less options' : '+ Time, type, people...'}
-      </button>
-      {expanded && (
-        <div className="space-y-1.5 mt-1 mb-2">
-          <div className="flex gap-1.5">
-            <input type="time" value={start} onChange={e => setStart(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1 text-xs flex-1 focus:border-stone-500 outline-none" />
-            <input type="time" value={end} onChange={e => setEnd(e.target.value)} className="border border-stone-300 rounded-lg px-2 py-1 text-xs flex-1 focus:border-stone-500 outline-none" />
-          </div>
-          <select value={type} onChange={e => setType(e.target.value as ActivityType)} className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:border-stone-500 outline-none">
-            <option value="routine">Routine</option><option value="meal">Meal</option>
-            <option value="personal">Personal</option><option value="work">Work</option>
-            <option value="family">Family</option><option value="school">School</option>
-            <option value="activity">Activity</option><option value="break">Break</option>
-            <option value="other">Other</option>
-          </select>
-          <input type="text" value={people} onChange={e => setPeople(e.target.value)}
-            className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:border-stone-500 outline-none" placeholder="Jason, Kay, Emma, Toby" />
-          <input type="text" value={notes} onChange={e => setNotes(e.target.value)}
-            className="w-full border border-stone-300 rounded-lg px-2 py-1 text-xs focus:border-stone-500 outline-none" placeholder="Notes" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
+
+      {/* Modal */}
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex justify-between items-center mb-5">
+          <h2 className="text-lg font-bold text-stone-800">{editState.isNew ? 'New Activity' : 'Edit Activity'}</h2>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none">&times;</button>
         </div>
-      )}
-      <div className="flex gap-1.5">
-        <button onClick={handleSave} className="bg-stone-800 text-white px-3 py-1 rounded-lg text-xs font-semibold hover:bg-stone-700">Save</button>
-        <button onClick={onClose} className="bg-stone-100 text-stone-600 px-3 py-1 rounded-lg text-xs font-medium hover:bg-stone-200">Cancel</button>
-        <button onClick={() => { onRemove(index); onClose(); }} className="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-xs font-medium hover:bg-red-100 ml-auto">Delete</button>
+
+        {/* Title */}
+        <div className="mb-4">
+          <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Title</label>
+          <input
+            type="text" value={title} onChange={e => setTitle(e.target.value)}
+            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 focus:ring-1 focus:ring-stone-300 outline-none"
+            placeholder="What's happening?"
+            autoFocus
+            onKeyDown={e => { if (e.key === 'Enter' && title.trim()) handleSave(); if (e.key === 'Escape') onClose(); }}
+          />
+        </div>
+
+        {/* Time */}
+        <div className="mb-4">
+          <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Time</label>
+          <div className="flex gap-2 items-center">
+            <input type="time" value={start} onChange={e => setStart(e.target.value)}
+              className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 outline-none text-center" />
+            <span className="text-stone-300 font-medium">to</span>
+            <input type="time" value={end} onChange={e => setEnd(e.target.value)}
+              className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 outline-none text-center" />
+          </div>
+        </div>
+
+        {/* Who */}
+        <div className="mb-4">
+          <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Who</label>
+          <div className="flex gap-2">
+            {PEOPLE.map(person => {
+              const isActive = selectedPeople.includes(person);
+              return (
+                <button
+                  key={person}
+                  onClick={() => togglePerson(person)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all border-2 ${
+                    isActive
+                      ? 'text-white border-transparent shadow-sm'
+                      : 'bg-white text-stone-400 border-stone-200 hover:border-stone-300'
+                  }`}
+                  style={isActive ? { backgroundColor: PERSON_COLORS[person]?.dot || '#666' } : {}}
+                >
+                  {person}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Type */}
+        <div className="mb-4">
+          <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Type</label>
+          <div className="flex flex-wrap gap-1.5">
+            {(Object.entries(ACTIVITY_COLORS) as [ActivityType, string][]).map(([t, color]) => (
+              <button
+                key={t}
+                onClick={() => setType(t)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border-2 ${
+                  type === t ? 'border-stone-600 shadow-sm' : 'border-transparent opacity-60 hover:opacity-100'
+                }`}
+                style={{ backgroundColor: color, color: getTypeTextColor(t) }}
+              >
+                {TYPE_LABELS[t]}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div className="mb-5">
+          <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Notes</label>
+          <input
+            type="text" value={notes} onChange={e => setNotes(e.target.value)}
+            className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 outline-none"
+            placeholder="Optional notes..."
+          />
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2">
+          <button
+            onClick={handleSave}
+            disabled={!title.trim()}
+            className="flex-1 bg-stone-800 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-stone-700 transition disabled:opacity-40"
+          >
+            {editState.isNew ? 'Add Activity' : 'Save Changes'}
+          </button>
+          {!editState.isNew && (
+            <button
+              onClick={() => { onRemove(editState.activityIndex); onClose(); }}
+              className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-red-100 transition"
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
