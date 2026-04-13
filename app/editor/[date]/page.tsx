@@ -179,7 +179,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     });
   }, [schedule]);
 
-  const handleToggleComplete = useCallback((index: number) => {
+  const handleToggleComplete = useCallback(async (index: number) => {
     if (!schedule) return;
     const newActivities = [...schedule.activities];
     newActivities[index] = {
@@ -187,7 +187,32 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       completed: !newActivities[index].completed,
       completedAt: !newActivities[index].completed ? new Date().toISOString() : undefined
     };
-    setSchedule({ ...schedule, activities: newActivities });
+    const updated = { ...schedule, activities: newActivities };
+    setSchedule(updated);
+
+    // Auto-save to DB
+    try {
+      const method = updated.id ? 'PUT' : 'POST';
+      const body: any = {
+        date: updated.date,
+        dayName: updated.dayName,
+        activities: updated.activities,
+        reminders: updated.reminders || []
+      };
+      if (updated.id) body.id = updated.id;
+      const res = await fetch('/api/schedules', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Re-attach calendar events (not stored in DB)
+        setSchedule({ ...data.schedule, calendarEvents: updated.calendarEvents });
+      }
+    } catch (e) {
+      console.warn('Auto-save failed:', e);
+    }
   }, [schedule]);
 
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
