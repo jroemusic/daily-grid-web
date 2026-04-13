@@ -94,7 +94,6 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
         date: schedule.date,
         dayName: schedule.dayName,
         activities: schedule.activities,
-        calendarEvents: schedule.calendarEvents || [],
         reminders: schedule.reminders || []
       };
       if (schedule.id) body.id = schedule.id;
@@ -107,7 +106,14 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
       if (res.ok) {
         const data = await res.json();
-        setSchedule(data.schedule);
+        // Re-fetch calendar events after save so they don't disappear
+        const calendarRes = await fetch(`/api/google-calendar/${schedule.date}`);
+        let calEvents = schedule.calendarEvents || [];
+        if (calendarRes.ok) {
+          const calendarData = await calendarRes.json();
+          calEvents = calendarData.events || [];
+        }
+        setSchedule({ ...data.schedule, calendarEvents: calEvents });
       } else {
         const err = await res.json();
         throw new Error(err.error || 'Failed to save');
@@ -172,6 +178,49 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       activities: schedule.activities.filter((_, i) => i !== index)
     });
   }, [schedule]);
+
+  const handleToggleComplete = useCallback((index: number) => {
+    if (!schedule) return;
+    const newActivities = [...schedule.activities];
+    newActivities[index] = {
+      ...newActivities[index],
+      completed: !newActivities[index].completed,
+      completedAt: !newActivities[index].completed ? new Date().toISOString() : undefined
+    };
+    setSchedule({ ...schedule, activities: newActivities });
+  }, [schedule]);
+
+  const [showSaveTemplate, setShowSaveTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+
+  async function saveAsTemplate() {
+    if (!schedule || !templateName.trim()) return;
+    try {
+      const res = await fetch('/api/templates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: templateName.trim().toLowerCase().replace(/\s+/g, '-'),
+          display_name: templateName.trim(),
+          activities: schedule.activities
+        })
+      });
+      if (res.ok) {
+        setShowSaveTemplate(false);
+        setTemplateName('');
+        // Refresh template list
+        const templatesRes = await fetch('/api/templates');
+        const templatesData = await templatesRes.json();
+        setTemplates((templatesData.templates || []).map((t: any) => ({ name: t.name, displayName: t.display_name })));
+      } else {
+        const err = await res.json();
+        alert(err.error || 'Failed to save template');
+      }
+    } catch (error) {
+      console.error('Error saving template:', error);
+      alert('Failed to save template');
+    }
+  }
 
   if (loading) {
     return (
@@ -278,6 +327,38 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
                   {saving ? 'Saving...' : 'Save'}
                 </button>
               )}
+
+              {/* Save as Template */}
+              {editMode && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowSaveTemplate(!showSaveTemplate)}
+                    className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-semibold hover:bg-amber-700 transition"
+                  >
+                    Save as Template
+                  </button>
+                  {showSaveTemplate && (
+                    <div className="absolute right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-30 p-3 w-56">
+                      <input
+                        type="text"
+                        value={templateName}
+                        onChange={e => setTemplateName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveAsTemplate(); if (e.key === 'Escape') setShowSaveTemplate(false); }}
+                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm mb-2"
+                        placeholder="Template name..."
+                        autoFocus
+                      />
+                      <button
+                        onClick={saveAsTemplate}
+                        disabled={!templateName.trim()}
+                        className="w-full bg-purple-600 text-white px-2 py-1 rounded text-sm font-semibold disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -290,6 +371,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           onActivityUpdate={handleActivityUpdate}
           onActivityAdd={handleActivityAdd}
           onActivityRemove={handleActivityRemove}
+          onToggleComplete={handleToggleComplete}
           editMode={editMode}
         />
       </main>

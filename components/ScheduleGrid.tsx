@@ -25,6 +25,7 @@ interface ScheduleGridProps {
   onActivityUpdate: (index: number, updates: Partial<Activity>) => void;
   onActivityAdd: (start: string, end: string, person: string) => void;
   onActivityRemove: (index: number) => void;
+  onToggleComplete: (index: number) => void;
   editMode: boolean;
 }
 
@@ -33,6 +34,7 @@ export default function ScheduleGrid({
   onActivityUpdate,
   onActivityAdd,
   onActivityRemove,
+  onToggleComplete,
   editMode
 }: ScheduleGridProps) {
   const [editState, setEditState] = useState<{
@@ -40,17 +42,22 @@ export default function ScheduleGrid({
     activityIndex: number;
   }>({ active: false, activityIndex: -1 });
   const [currentTime, setCurrentTime] = useState<string>('');
+  const [countdown, setCountdown] = useState<string>('');
 
-  // Update current time every minute
+  // Update current time and countdown every second
   useEffect(() => {
     function updateTime() {
       const now = new Date();
       setCurrentTime(
         `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
       );
+      // Countdown to next hour
+      const minsLeft = 59 - now.getMinutes();
+      const secsLeft = 59 - now.getSeconds();
+      setCountdown(`${minsLeft}:${secsLeft.toString().padStart(2, '0')}`);
     }
     updateTime();
-    const interval = setInterval(updateTime, 60000);
+    const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -189,15 +196,24 @@ export default function ScheduleGrid({
         </div>
       )}
 
-      {/* Next Up */}
-      {nextActivity && currentTime && (
-        <div className="bg-gradient-to-r from-yellow-100 to-yellow-200 rounded-xl p-3 border-l-4 border-yellow-500">
-          <div className="font-bold text-sm text-gray-800">Next Up</div>
-          <div className="font-semibold text-gray-800">
-            {nextActivity.title} ({formatTimeDisplay(nextActivity.start)} - {formatTimeDisplay(nextActivity.end)})
+      {/* Next Up + Countdown */}
+      {currentTime && (
+        <div className="flex gap-3">
+          <div className="flex-1 bg-gradient-to-r from-indigo-50 to-indigo-100 rounded-xl p-3 border-l-4 border-indigo-500 text-center">
+            <div className="font-bold text-sm text-indigo-900">Next Hour In</div>
+            <div className="text-2xl font-bold text-indigo-700 tabular-nums">{countdown}</div>
           </div>
+          {nextActivity && (
+            <div className="flex-1 bg-gradient-to-r from-yellow-100 to-yellow-200 rounded-xl p-3 border-l-4 border-yellow-500">
+              <div className="font-bold text-sm text-gray-800">Next Up</div>
+              <div className="font-semibold text-gray-800">
+                {nextActivity.title} ({formatTimeDisplay(nextActivity.start)} - {formatTimeDisplay(nextActivity.end)})
+              </div>
+            </div>
+          )}
         </div>
       )}
+      {/* Old standalone Next Up removed */}
 
       {/* Calendar Events */}
       {schedule.calendarEvents && schedule.calendarEvents.length > 0 && (
@@ -294,7 +310,20 @@ export default function ScheduleGrid({
                               onClose={() => setEditState({ active: false, activityIndex: -1 })}
                             />
                           ) : (
-                            <span className="text-xs leading-tight block">{activity.title}</span>
+                            <div className="flex items-center gap-1 justify-center">
+                              <button
+                                onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
+                                className={`w-3.5 h-3.5 rounded-sm border flex-shrink-0 transition-colors ${activity.completed ? 'bg-green-500 border-green-600' : 'border-gray-400 hover:border-green-500'}`}
+                                title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
+                              >
+                                {activity.completed && (
+                                  <svg viewBox="0 0 12 12" className="w-full h-full text-white" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <path d="M2 6l3 3 5-5" />
+                                  </svg>
+                                )}
+                              </button>
+                              <span className="text-xs leading-tight">{activity.title}</span>
+                            </div>
                           )}
                         </td>
                       );
