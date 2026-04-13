@@ -32,6 +32,7 @@ interface ScheduleGridProps {
   onActivityAdd: (start: string, end: string, person: string) => void;
   onActivityRemove: (index: number) => void;
   onToggleComplete: (index: number) => void;
+  onCalendarEventOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
   editMode: boolean;
 }
 
@@ -41,6 +42,7 @@ export default function ScheduleGrid({
   onActivityAdd,
   onActivityRemove,
   onToggleComplete,
+  onCalendarEventOverride,
   editMode
 }: ScheduleGridProps) {
   const [editState, setEditState] = useState<{
@@ -83,17 +85,28 @@ export default function ScheduleGrid({
     }
   }
 
+  // Helper: get resolved people for a calendar event (override > default)
+  function getEventPeople(event: CalendarEvent): string[] {
+    if (event.overridePeople) return event.overridePeople;
+    if (event.people) return event.people;
+    if (event.person) return [event.person];
+    return ['Jason'];
+  }
+
   const calEventRows = new Map<string, CalendarEvent>();
   for (const event of schedule.calendarEvents || []) {
+    if (event.enabled === false) continue; // disabled via override
     const evtStart = timeToMinutes(isoToHHMM(event.start));
     const evtEnd = timeToMinutes(isoToHHMM(event.end));
-    const person = event.person || 'Jason';
+    const eventPeople = getEventPeople(event);
     for (let i = 0; i < TIME_SLOTS.length - 1; i++) {
       const slotStart = timeToMinutes(TIME_SLOTS[i]);
       const slotEnd = timeToMinutes(TIME_SLOTS[i + 1]);
       const overlap = Math.min(evtEnd, slotEnd) - Math.max(evtStart, slotStart);
       if (overlap >= 15) {
-        calEventRows.set(`${TIME_SLOTS[i]}-${TIME_SLOTS[i + 1]}-${person}`, event);
+        for (const person of eventPeople) {
+          calEventRows.set(`${TIME_SLOTS[i]}-${TIME_SLOTS[i + 1]}-${person}`, event);
+        }
       }
     }
   }
@@ -173,11 +186,11 @@ export default function ScheduleGrid({
             <div className="text-3xl font-bold text-stone-700 tabular-nums tracking-tight">{countdown}</div>
           </div>
 
-          {/* Calendar Events (replaces Next Up) */}
+          {/* Calendar Events (interactive) */}
           {schedule.calendarEvents && schedule.calendarEvents.length > 0 ? (
-            <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-blue-200">
+            <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-blue-200 overflow-hidden">
               <div className="text-[11px] font-semibold tracking-wider uppercase text-blue-400 mb-2">Calendar</div>
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {schedule.calendarEvents.map((event: CalendarEvent) => {
                   const eventTime = event.start.includes('T')
                     ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
@@ -185,14 +198,51 @@ export default function ScheduleGrid({
                   const eventEndTime = event.end.includes('T')
                     ? new Date(event.end).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
                     : '';
+                  const isEnabled = event.enabled !== false;
+                  const eventPeople = getEventPeople(event);
                   return (
-                    <div key={event.id} className="flex items-center gap-2 text-sm">
-                      <span className="font-mono text-xs font-semibold text-blue-600 min-w-[110px]">
-                        {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime}` : ''}
-                      </span>
-                      <span className="font-semibold text-stone-800">{event.summary}</span>
-                      {event.person && <span className="text-stone-400 text-xs">({event.person})</span>}
-                      {event.location && <span className="text-stone-400 text-xs italic">@ {event.location}</span>}
+                    <div key={event.id} className={`rounded-lg p-2 transition-opacity ${isEnabled ? 'bg-blue-50' : 'bg-stone-100 opacity-50'}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {/* Enable/disable toggle */}
+                        <button
+                          onClick={() => onCalendarEventOverride(event.id, { enabled: !isEnabled })}
+                          className={`w-7 h-4 rounded-full transition-colors relative flex-shrink-0 ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}
+                        >
+                          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${isEnabled ? 'left-3.5' : 'left-0.5'}`} />
+                        </button>
+                        <span className="font-mono text-[10px] font-semibold text-blue-600 min-w-[100px]">
+                          {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime}` : ''}
+                        </span>
+                        <span className="font-semibold text-stone-800 text-xs">{event.summary}</span>
+                        {event.source && <span className="text-stone-400 text-[10px] ml-auto flex-shrink-0">{event.source}</span>}
+                      </div>
+                      {/* Person toggles */}
+                      <div className="flex gap-1 ml-9">
+                        {PEOPLE.map(person => {
+                          const isActive = eventPeople.includes(person);
+                          return (
+                            <button
+                              key={person}
+                              onClick={() => {
+                                const current = eventPeople;
+                                const next = isActive
+                                  ? current.filter(p => p !== person)
+                                  : [...current, person];
+                                if (next.length === 0) return; // must have at least 1
+                                onCalendarEventOverride(event.id, { overridePeople: next });
+                              }}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                                isActive
+                                  ? 'text-white'
+                                  : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                              }`}
+                              style={isActive ? { backgroundColor: PERSON_COLORS[person]?.dot || '#666' } : {}}
+                            >
+                              {person}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}

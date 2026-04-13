@@ -34,11 +34,17 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       }
 
       let scheduleData: Schedule | null = null;
-
+      let savedOverrides: { id: string; enabled?: boolean; overridePeople?: string[] }[] = [];
       const res = await fetch(`/api/schedules/${scheduleDate}`);
       if (res.ok) {
         const data = await res.json();
         scheduleData = data.schedule;
+        // Extract saved calendar overrides from DB
+        if (scheduleData?.calendarEvents && Array.isArray(scheduleData.calendarEvents)) {
+          savedOverrides = scheduleData.calendarEvents.filter(
+            (ev: any) => ev.enabled !== undefined || ev.overridePeople !== undefined
+          );
+        }
       } else if (res.status === 404) {
         scheduleData = {
           id: '',
@@ -52,12 +58,19 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
         throw new Error('Failed to load schedule');
       }
 
-      // Fetch calendar events
+      // Fetch calendar events and apply saved overrides
       try {
         const calendarRes = await fetch(`/api/google-calendar/${scheduleDate}`);
         if (calendarRes.ok) {
           const calendarData = await calendarRes.json();
-          scheduleData!.calendarEvents = calendarData.events || [];
+          const freshEvents = calendarData.events || [];
+          // Merge saved overrides into fresh events
+          const overrideMap = new Map(savedOverrides.map((o: any) => [o.id, o]));
+          scheduleData!.calendarEvents = freshEvents.map((ev: any) => {
+            const saved = overrideMap.get(ev.id);
+            if (saved) return { ...ev, enabled: saved.enabled, overridePeople: saved.overridePeople };
+            return ev;
+          });
         }
       } catch (e) {
         console.warn('Failed to load calendar events:', e);
@@ -177,6 +190,46 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       ...schedule,
       activities: schedule.activities.filter((_, i) => i !== index)
     });
+  }, [schedule]);
+
+  const handleCalendarEventOverride = useCallback(async (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => {
+    if (!schedule || !schedule.calendarEvents) return;
+    const updatedEvents = schedule.calendarEvents.map(ev => {
+      if (ev.id !== eventId) return ev;
+      return { ...ev, ...overrides };
+    });
+    const updated = { ...schedule, calendarEvents: updatedEvents };
+    setSchedule(updated);
+
+    // Auto-save overrides to DB (store just the override data, not raw events)
+    try {
+      const overrideData = updatedEvents.map(ev => ({
+        id: ev.id,
+        enabled: ev.enabled,
+        overridePeople: ev.overridePeople
+      })).filter(ev => ev.enabled !== undefined || ev.overridePeople !== undefined);
+
+      const method = updated.id ? 'PUT' : 'POST';
+      const body: any = {
+        date: updated.date,
+        dayName: updated.dayName,
+        activities: updated.activities,
+        reminders: updated.reminders || [],
+        calendarEvents: overrideData
+      };
+      if (updated.id) body.id = updated.id;
+      const res = await fetch('/api/schedules', {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSchedule({ ...data.schedule, calendarEvents: updatedEvents });
+      }
+    } catch (e) {
+      console.warn('Auto-save calendar override failed:', e);
+    }
   }, [schedule]);
 
   const handleToggleComplete = useCallback(async (index: number) => {
@@ -397,6 +450,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           onActivityAdd={handleActivityAdd}
           onActivityRemove={handleActivityRemove}
           onToggleComplete={handleToggleComplete}
+          onCalendarEventOverride={handleCalendarEventOverride}
           editMode={editMode}
         />
       </main>

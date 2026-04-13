@@ -78,9 +78,13 @@ export interface CalendarEvent {
   summary: string;
   start: string;
   end: string;
-  person?: string;
+  person?: string;       // legacy single person
+  people?: string[];     // default people from calendar source
+  source?: string;       // calendar name (e.g. "Kids", "Important")
   location?: string;
   description?: string;
+  enabled?: boolean;     // override: false = hidden from grid
+  overridePeople?: string[]; // override: custom people assignment
 }
 
 export interface Reminder {

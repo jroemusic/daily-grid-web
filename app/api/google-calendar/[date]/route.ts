@@ -71,18 +71,44 @@ export async function GET(
 
     // Fetch from all family calendars
     const calendarIds = [
-      'primary',
-      'jandkaymusic@gmail.com',
-      'vppqsrush6srtu99lle2ifetrkobh5af@import.calendar.google.com',
-      '5uv8d4df4tsms9427jgqo64vjuktheme@import.calendar.google.com'
+      'primary',                                                // J-Roe (Jason)
+      'jandkaymusic@gmail.com',                                 // Kay
+      'vppqsrush6srtu99lle2ifetrkobh5af@import.calendar.google.com', // TutorCruncher (Kay)
+      '5uv8d4df4tsms9427jgqo64vjuktheme@import.calendar.google.com', // TutorCruncher (Jason)
+      'r4ed9f5826klr92jftmpmepabo@group.calendar.google.com',  // Whole Family
+      'da1272vj5mrjsk22ld33kk45r0@group.calendar.google.com',  // J & Kay
+      '1khf6ac7k3nsguu4oje8iha2js@group.calendar.google.com',  // Important
+      '51i5ch3mfi180fgmbac6bv7t8c@group.calendar.google.com',  // Kids
+      'family16071183685625242444@group.calendar.google.com',   // Family
+      'en.usa#holiday@group.v.calendar.google.com'             // US Holidays
     ];
 
-    const CALENDAR_PERSON_MAP: Record<string, string> = {
+    const CALENDAR_PERSON_MAP: Record<string, string[]> = {
+      'primary': ['Jason'],
+      'jroemusic@gmail.com': ['Jason'],
+      'jandkaymusic@gmail.com': ['Kay'],
+      'vppqsrush6srtu99lle2ifetrkobh5af@import.calendar.google.com': ['Kay'],
+      '5uv8d4df4tsms9427jgqo64vjuktheme@import.calendar.google.com': ['Jason'],
+      'r4ed9f5826klr92jftmpmepabo@group.calendar.google.com': ['Jason', 'Kay', 'Emma', 'Toby'],
+      'da1272vj5mrjsk22ld33kk45r0@group.calendar.google.com': ['Jason', 'Kay'],
+      '1khf6ac7k3nsguu4oje8iha2js@group.calendar.google.com': ['Jason', 'Kay', 'Emma', 'Toby'],
+      '51i5ch3mfi180fgmbac6bv7t8c@group.calendar.google.com': ['Emma', 'Toby'],
+      'family16071183685625242444@group.calendar.google.com': ['Jason', 'Kay', 'Emma', 'Toby'],
+      'en.usa#holiday@group.v.calendar.google.com': ['Jason', 'Kay', 'Emma', 'Toby']
+    };
+
+    const CALENDAR_SOURCE_MAP: Record<string, string> = {
       'primary': 'Jason',
       'jroemusic@gmail.com': 'Jason',
       'jandkaymusic@gmail.com': 'Kay',
-      'vppqsrush6srtu99lle2ifetrkobh5af@import.calendar.google.com': 'Kay',
-      '5uv8d4df4tsms9427jgqo64vjuktheme@import.calendar.google.com': 'Jason'
+      'vppqsrush6srtu99lle2ifetrkobh5af@import.calendar.google.com': 'TutorCruncher',
+      '5uv8d4df4tsms9427jgqo64vjuktheme@import.calendar.google.com': 'TutorCruncher',
+      'r4ed9f5826klr92jftmpmepabo@group.calendar.google.com': 'Whole Family',
+      'da1272vj5mrjsk22ld33kk45r0@group.calendar.google.com': 'J & Kay',
+      '1khf6ac7k3nsguu4oje8iha2js@group.calendar.google.com': 'Important',
+      '51i5ch3mfi180fgmbac6bv7t8c@group.calendar.google.com': 'Kids',
+      'family16071183685625242444@group.calendar.google.com': 'Family',
+      'en.usa#holiday@group.v.calendar.google.com': 'Holidays'
     };
 
     const allEvents: any[] = [];
@@ -106,7 +132,8 @@ export async function GET(
             summary: item.summary || 'No title',
             start: item.start?.dateTime || item.start?.date || '',
             end: item.end?.dateTime || item.end?.date || '',
-            person: CALENDAR_PERSON_MAP[calId] || 'Jason',
+            people: CALENDAR_PERSON_MAP[calId] || ['Jason'],
+            source: CALENDAR_SOURCE_MAP[calId] || calId,
             location: item.location,
             description: item.description
           }));
