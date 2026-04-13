@@ -211,7 +211,7 @@ function TemplateCard({ template }: { template: Template }) {
 
 function formatDateDisplay(dateStr: string): string {
   try {
-    return format(new Date(dateStr), 'MMM d, yyyy');
+    return format(new Date(dateStr + 'T00:00:00'), 'MMM d, yyyy');
   } catch {
     return dateStr;
   }

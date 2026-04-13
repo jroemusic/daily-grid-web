@@ -92,7 +92,7 @@ export function sortActivitiesByTime<T extends { start: string }>(activities: T[
  * Get day name from date
  */
 export function getDayName(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + 'T00:00:00');
   return date.toLocaleDateString('en-US', { weekday: 'long' });
 }
 
@@ -100,22 +100,29 @@ export function getDayName(dateStr: string): string {
  * Format date for display (e.g., "March 13, 2026")
  */
 export function formatDateDisplay(dateStr: string): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + 'T00:00:00');
   return date.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 /**
- * Get today's date in YYYY-MM-DD format
+ * Get today's date in YYYY-MM-DD format (local timezone)
  */
 export function getTodayDate(): string {
-  return new Date().toISOString().split('T')[0];
+  const date = new Date();
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
- * Add days to a date
+ * Add days to a date (local timezone)
  */
 export function addDays(dateStr: string, days: number): string {
-  const date = new Date(dateStr);
+  const date = new Date(dateStr + 'T00:00:00');
   date.setDate(date.getDate() + days);
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
