@@ -108,7 +108,8 @@ button, a, input, select, textarea, .transition-colors {
 html, body {
   overscroll-behavior: none;
   -webkit-touch-callout: none;
-  touch-action: manipulation;
+  /* Don't set touch-action here — let individual elements control it.
+     'manipulation' on root can interfere with @dnd-kit TouchSensor. */
 }
 
 /* Touch-specific: show hover-only elements on touch devices */

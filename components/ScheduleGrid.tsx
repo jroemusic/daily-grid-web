@@ -84,7 +84,7 @@ function DroppableCell({ id, children, className, style, onClick, onContextMenu,
   );
 }
 
-// Draggable activity wrapper
+// Draggable activity wrapper — fills entire cell so touch always hits it
 function DraggableActivity({
   activity,
   person,
@@ -100,21 +100,33 @@ function DraggableActivity({
   moveMode: boolean;
   children: React.ReactNode;
 }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, isDragging, transform } = useDraggable({
     id: `drag-${activity.id}-${person}-${rowStart}`,
     data: { activity, person, rowStart, rowEnd },
-    disabled: !moveMode,
   });
+
+  if (!moveMode) {
+    return <>{children}</>;
+  }
 
   return (
     <div
       ref={setNodeRef}
-      {...(moveMode ? listeners : {})}
-      {...(moveMode ? attributes : {})}
+      {...listeners}
+      {...attributes}
       style={{
-        touchAction: moveMode ? 'none' : 'manipulation',
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        touchAction: 'none',
         opacity: isDragging ? 0.4 : 1,
-        cursor: moveMode ? 'grab' : undefined,
+        cursor: 'grab',
+        zIndex: 1,
+        transform: transform
+          ? `translate3d(${transform.x}px, ${transform.y}px, 0)`
+          : undefined,
       }}
     >
       {children}
@@ -150,13 +162,13 @@ export default function ScheduleGrid({
   const [moveMode, setMoveMode] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // dnd-kit sensors: MouseSensor for desktop, TouchSensor for touch
+  // dnd-kit sensors: both use distance constraint for immediate feel
   const sensors = useSensors(
     useSensor(MouseSensor, {
-      activationConstraint: { distance: 8 },
+      activationConstraint: { distance: 5 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 150, tolerance: 5 },
+      activationConstraint: { distance: 5 },
     })
   );
 
