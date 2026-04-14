@@ -514,59 +514,64 @@ function CalendarStrip({ events, onOverride }: {
   if (events.length === 0) return null;
 
   return (
-    <div className="bg-white border-t border-stone-200 flex-shrink-0" style={{ maxHeight: '30vh' }}>
-      <div className="max-w-6xl mx-auto px-4 py-2 overflow-y-auto" style={{ maxHeight: '30vh' }}>
-        <div className="space-y-1">
+    <div className="bg-white border-t border-stone-200 flex-shrink-0">
+      {/* Expanded person chooser overlay */}
+      {expandedEvent && (() => {
+        const event = events.find(e => e.id === expandedEvent);
+        if (!event) return null;
+        const people = getEventPeople(event);
+        return (
+          <div className="absolute bottom-full left-0 right-0 bg-white border-b border-stone-200 shadow-lg z-30 px-4 py-2">
+            <div className="max-w-6xl mx-auto flex items-center gap-3">
+              <span className="text-xs font-medium text-stone-600">{event.summary}</span>
+              <div className="flex gap-1.5">
+                {PEOPLE.map(person => {
+                  const isActive = people.includes(person);
+                  return (
+                    <button
+                      key={person}
+                      onClick={() => {
+                        const next = isActive ? people.filter(x => x !== person) : [...people, person];
+                        if (next.length === 0) return;
+                        onOverride(event.id, { overridePeople: next });
+                      }}
+                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                        isActive ? 'text-white shadow-sm' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                      }`}
+                      style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
+                    >
+                      {person}
+                    </button>
+                  );
+                })}
+              </div>
+              <button onClick={() => setExpandedEvent(null)} className="ml-auto text-stone-400 hover:text-stone-600 text-xs">✕</button>
+            </div>
+          </div>
+        );
+      })()}
+      {/* Single-row horizontal scroll */}
+      <div className="max-w-6xl mx-auto px-4 py-1.5 overflow-x-auto">
+        <div className="flex gap-2">
           {events.map(event => {
             const isEnabled = event.enabled !== false;
             const people = getEventPeople(event);
             const time = event.start.includes('T') ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
             const isExpanded = expandedEvent === event.id;
             return (
-              <div key={event.id}>
-                <div
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs cursor-pointer ${isEnabled ? 'bg-blue-50 text-blue-800' : 'bg-stone-100 text-stone-400 line-through'}`}
-                  onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
-                >
-                  <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-5 h-3 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}>
-                    <span className={`absolute top-px w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-2.5' : 'left-px'}`} />
-                  </button>
-                  {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
-                  <span className="font-medium">{event.summary}</span>
-                  <div className="flex gap-0.5 ml-auto">
-                    {people.map(p => (
-                      <span key={p} className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: PERSON_COLORS[p] || '#666' }}>
-                        {p[0]}
-                      </span>
-                    ))}
-                  </div>
-                  <span className={`text-stone-400 text-[10px] transition-transform ${isExpanded ? 'rotate-180' : ''}`}>&#9660;</span>
+              <div key={event.id} className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] whitespace-nowrap flex-shrink-0 cursor-pointer ${isEnabled ? (isExpanded ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300' : 'bg-blue-50 text-blue-800') : 'bg-stone-100 text-stone-400 line-through'}`}
+                onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
+              >
+                <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-5 h-3 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}>
+                  <span className={`absolute top-px w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-2.5' : 'left-px'}`} />
+                </button>
+                {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
+                <span className="font-medium">{event.summary}</span>
+                <div className="flex gap-0.5">
+                  {people.map(p => (
+                    <span key={p} className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: PERSON_COLORS[p] || '#666' }}>{p[0]}</span>
+                  ))}
                 </div>
-                {isExpanded && (
-                  <div className="flex gap-1.5 mt-1 ml-8">
-                    {PEOPLE.map(person => {
-                      const isActive = people.includes(person);
-                      return (
-                        <button
-                          key={person}
-                          onClick={() => {
-                            const next = isActive ? people.filter(x => x !== person) : [...people, person];
-                            if (next.length === 0) return;
-                            onOverride(event.id, { overridePeople: next });
-                          }}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                            isActive
-                              ? 'text-white shadow-sm'
-                              : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
-                          }`}
-                          style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
-                        >
-                          {person}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
               </div>
             );
           })}
