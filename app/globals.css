@@ -94,7 +94,7 @@ button, a, input, select, textarea, .transition-colors {
   transition-duration: 150ms;
 }
 
-/* Disable all transitions during active drag */
+/* Disable all transitions during active interactions */
 .dragging-active * {
   transition: none !important;
 }
