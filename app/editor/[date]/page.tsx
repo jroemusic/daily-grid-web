@@ -2,9 +2,10 @@
 
 import { useEffect, useState, use, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { Schedule, Activity, ActivityType, ACTIVITY_COLORS } from '@/lib/types';
+import { Schedule, Activity, ActivityType, ACTIVITY_COLORS, CalendarEvent } from '@/lib/types';
 import { getDayName, getTodayDate } from '@/lib/time';
 import { formatDate, openPrintableView } from '@/lib/pdf';
+import { useAutoSave } from '@/lib/useAutoSave';
 import ScheduleGrid from '@/components/ScheduleGrid';
 
 export default function EditorPage({ params }: { params: Promise<{ date: string }> }) {
@@ -14,8 +15,26 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [saving, setSaving] = useState(false);
   const [editMode, setEditMode] = useState(true);
   const [triggerNewActivity, setTriggerNewActivity] = useState(0);
-  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
   const [templates, setTemplates] = useState<{ name: string; displayName: string }[]>([]);
+  const [currentTime, setCurrentTime] = useState('');
+  const [countdown, setCountdown] = useState('');
+
+  // Clock + countdown — update every second
+  useEffect(() => {
+    function tick() {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+      const minsUntilNextHour = 60 - now.getMinutes();
+      const secsUntilNextHour = 60 - now.getSeconds();
+      const totalSecs = minsUntilNextHour * 60 + secsUntilNextHour;
+      const m = Math.floor(totalSecs / 60);
+      const s = totalSecs % 60;
+      setCountdown(`${m}:${String(s).padStart(2, '0')}`);
+    }
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     loadSchedule();
@@ -140,6 +159,33 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     }
   }
 
+  // Auto-save hook
+  const saveStatus = useAutoSave(schedule, async (s) => {
+    const method = s.id ? 'PUT' : 'POST';
+    const body: any = {
+      date: s.date,
+      dayName: s.dayName,
+      activities: s.activities,
+      reminders: s.reminders || []
+    };
+    if (s.id) body.id = s.id;
+    const res = await fetch('/api/schedules', {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const calendarRes = await fetch(`/api/google-calendar/${s.date}`);
+      let calEvents = s.calendarEvents || [];
+      if (calendarRes.ok) {
+        const calendarData = await calendarRes.json();
+        calEvents = calendarData.events || [];
+      }
+      setSchedule({ ...data.schedule, calendarEvents: calEvents });
+    }
+  }, { enabled: editMode });
+
   async function loadTemplate(templateName: string) {
     try {
       const res = await fetch(`/api/templates/${templateName}`);
@@ -158,7 +204,6 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     } catch (error) {
       console.error('Error loading template:', error);
     }
-    setShowTemplatePicker(false);
   }
 
   const handleActivityUpdate = useCallback((index: number, updates: Partial<Activity>) => {
@@ -321,132 +366,57 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const dayName = getDayName(schedule.date);
 
   return (
-    <div className="min-h-screen bg-stone-100">
-      {/* Header / Toolbar */}
+    <div className="h-screen flex flex-col bg-stone-100 overflow-hidden">
+      {/* Thin header: date | clock + countdown | controls */}
       <header className="bg-white border-b border-stone-200 sticky top-0 z-20">
-        <div className="max-w-5xl mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
-            <div>
-              <Link href="/" className="text-stone-400 hover:text-stone-600 text-xs font-medium tracking-wide">
-                &larr; Dashboard
-              </Link>
-              <h1 className="text-xl font-bold text-stone-800 mt-0.5 tracking-tight">
-                {dayName} <span className="text-stone-400 font-normal">&mdash;</span> <span className="text-stone-600">{displayDate}</span>
-              </h1>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {/* Edit/View toggle */}
-              <button
-                onClick={() => setEditMode(!editMode)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition ${editMode ? 'bg-stone-800 text-white' : 'bg-stone-200 text-stone-600'}`}
-              >
-                {editMode ? 'EDITING' : 'VIEW'}
-              </button>
-
-              {/* Templates */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowTemplatePicker(!showTemplatePicker)}
-                  className="bg-stone-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-stone-600 transition"
-                >
-                  TEMPLATES
-                </button>
-                {showTemplatePicker && (
-                  <div className="absolute right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-30 w-48 overflow-hidden">
-                    {templates.length === 0 ? (
-                      <div className="p-3 text-sm text-stone-400">No templates</div>
-                    ) : (
-                      templates.map(t => (
-                        <button
-                          key={t.name}
-                          onClick={() => loadTemplate(t.name)}
-                          className="w-full text-left px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 border-b border-stone-100 last:border-0 transition"
-                        >
-                          {t.displayName}
-                        </button>
-                      ))
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Add Activity */}
-              {editMode && (
-                <button
-                  onClick={() => setTriggerNewActivity(n => n + 1)}
-                  className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-emerald-700 transition"
-                >
-                  + ACTIVITY
-                </button>
-              )}
-
-              {/* Refresh Calendar */}
-              <button
-                onClick={refreshCalendar}
-                className="bg-sky-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-sky-700 transition"
-              >
-                SYNC CAL
-              </button>
-
-              {/* Print */}
-              <button
-                onClick={() => openPrintableView(schedule)}
-                className="bg-stone-500 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-stone-600 transition"
-              >
-                PRINT
-              </button>
-
-              {/* Save */}
-              {editMode && (
-                <button
-                  onClick={saveSchedule}
-                  disabled={saving}
-                  className="bg-orange-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-orange-700 transition disabled:opacity-50"
-                >
-                  {saving ? 'SAVING...' : 'SAVE'}
-                </button>
-              )}
-
-              {/* Save as Template */}
-              {editMode && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowSaveTemplate(!showSaveTemplate)}
-                    className="bg-amber-600 text-white px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide hover:bg-amber-700 transition"
-                  >
-                    SAVE TEMPLATE
-                  </button>
-                  {showSaveTemplate && (
-                    <div className="absolute right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-30 p-3 w-56">
-                      <input
-                        type="text"
-                        value={templateName}
-                        onChange={e => setTemplateName(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') saveAsTemplate(); if (e.key === 'Escape') setShowSaveTemplate(false); }}
-                        className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:border-stone-500 outline-none"
-                        placeholder="Template name..."
-                        autoFocus
-                      />
-                      <button
-                        onClick={saveAsTemplate}
-                        disabled={!templateName.trim()}
-                        className="w-full bg-stone-800 text-white px-2 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50 hover:bg-stone-700 transition"
-                      >
-                        SAVE TEMPLATE
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+        <div className="max-w-6xl mx-auto px-4 h-12 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-stone-400 hover:text-stone-600 text-xs font-medium tracking-wide">&larr;</Link>
+            <h1 className="text-sm font-bold text-stone-800 tracking-tight">
+              {dayName} <span className="text-stone-400 font-normal mx-1">&mdash;</span> <span className="text-stone-500">{displayDate}</span>
+            </h1>
+          </div>
+          <div className="flex items-center gap-4">
+            <span className="text-lg font-bold text-stone-800 tabular-nums">{currentTime}</span>
+            <span className="text-xs font-semibold text-stone-400 tabular-nums bg-stone-100 px-2 py-0.5 rounded-full">{countdown}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {editMode && (
+              <span className={`text-[10px] font-semibold tracking-wide transition-opacity ${saveStatus === 'saving' ? 'text-orange-500' : saveStatus === 'saved' ? 'text-green-500' : 'text-transparent'}`}>
+                {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : ''}
+              </span>
+            )}
+            <button onClick={() => setEditMode(!editMode)} className={`px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide transition ${editMode ? 'bg-stone-800 text-white' : 'bg-stone-200 text-stone-600'}`}>
+              {editMode ? 'EDIT' : 'VIEW'}
+            </button>
+            {editMode && (
+              <button onClick={() => setTriggerNewActivity(n => n + 1)} className="bg-emerald-600 text-white px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide hover:bg-emerald-700 transition">+ ADD</button>
+            )}
+            <MoreMenu editMode={editMode} templates={templates} onLoadTemplate={loadTemplate} onRefreshCalendar={refreshCalendar} onPrint={() => openPrintableView(schedule)} onSaveAsTemplate={() => setShowSaveTemplate(true)} />
           </div>
         </div>
       </header>
 
-      {/* Grid */}
-      <main className="max-w-5xl mx-auto px-4 py-5">
+      {/* Progress hairline */}
+      <div className="max-w-6xl mx-auto px-4">
+        <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
+          <div className="h-full rounded-full transition-all" style={{
+            width: `${(() => {
+              if (!currentTime) return 0;
+              const now = new Date();
+              const mins = now.getHours() * 60 + now.getMinutes();
+              return Math.max(0, Math.min(100, ((mins - 420) / 900) * 100));
+            })()}%`,
+            background: 'linear-gradient(90deg, #f97316, #fb923c, #22c55e)'
+          }} />
+        </div>
+      </div>
+
+      {/* Schedule grid — fills remaining viewport */}
+      <main className="max-w-6xl mx-auto px-4 py-3 flex-1 overflow-hidden">
         <ScheduleGrid
           schedule={schedule}
+          currentTime={currentTime}
           onActivityUpdate={handleActivityUpdate}
           onActivityAdd={handleActivityAdd}
           onActivityRemove={handleActivityRemove}
@@ -456,6 +426,119 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           triggerNewActivity={triggerNewActivity}
         />
       </main>
+
+      {/* Calendar strip — compact, below the grid */}
+      <CalendarStrip events={schedule.calendarEvents || []} onOverride={handleCalendarEventOverride} />
+
+      {/* Save-as-template modal */}
+      {showSaveTemplate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-64">
+            <h3 className="text-sm font-bold text-stone-800 mb-2">Save as Template</h3>
+            <input
+              type="text"
+              value={templateName}
+              onChange={e => setTemplateName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') saveAsTemplate(); if (e.key === 'Escape') setShowSaveTemplate(false); }}
+              className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:border-stone-500 outline-none"
+              placeholder="Template name..."
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button onClick={() => setShowSaveTemplate(false)} className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-stone-200 text-stone-600 hover:bg-stone-300 transition">Cancel</button>
+              <button onClick={saveAsTemplate} disabled={!templateName.trim()} className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-stone-800 text-white disabled:opacity-50 hover:bg-stone-700 transition">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── MoreMenu ──────────────────────────────────────────────────────────
+function MoreMenu({ editMode, templates, onLoadTemplate, onRefreshCalendar, onPrint, onSaveAsTemplate }: {
+  editMode: boolean;
+  templates: { name: string; displayName: string }[];
+  onLoadTemplate: (name: string) => void;
+  onRefreshCalendar: () => void;
+  onPrint: () => void;
+  onSaveAsTemplate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} className="bg-stone-200 text-stone-600 px-2 py-1 rounded-md text-[11px] font-semibold tracking-wide hover:bg-stone-300 transition">&#8226;&#8226;&#8226;</button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-50 w-52 overflow-hidden">
+            {templates.length > 0 && (
+              <div className="border-b border-stone-100">
+                <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider uppercase text-stone-400">Templates</div>
+                {templates.map(t => (
+                  <button key={t.name} onClick={() => { onLoadTemplate(t.name); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition">{t.displayName}</button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { onRefreshCalendar(); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition">Sync Calendar</button>
+            <button onClick={() => { onPrint(); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition">Print</button>
+            {editMode && (
+              <button onClick={() => { onSaveAsTemplate(); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 border-t border-stone-100 transition">Save as Template</button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ── CalendarStrip ─────────────────────────────────────────────────────
+function CalendarStrip({ events, onOverride }: {
+  events: CalendarEvent[];
+  onOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
+}) {
+  const [collapsed, setCollapsed] = useState(events.length === 0);
+  const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
+  const PERSON_COLORS: Record<string, string> = { Jason: '#2563eb', Kay: '#db2777', Emma: '#16a34a', Toby: '#ea580c' };
+
+  function getEventPeople(event: CalendarEvent): string[] {
+    if (event.overridePeople) return event.overridePeople;
+    if (event.people) return event.people;
+    if (event.person) return [event.person];
+    return ['Jason'];
+  }
+
+  if (events.length === 0) return null;
+
+  return (
+    <div className="max-w-6xl mx-auto px-4 pb-4">
+      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
+        <button onClick={() => setCollapsed(!collapsed)} className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
+          <span className={`transition-transform ${collapsed ? '' : 'rotate-90'}`}>&#9654;</span>
+          Calendar ({events.length})
+        </button>
+        {!collapsed && (
+          <div className="px-4 pb-3 flex flex-wrap gap-2">
+            {events.map(event => {
+              const isEnabled = event.enabled !== false;
+              const people = getEventPeople(event);
+              const time = event.start.includes('T') ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+              return (
+                <div key={event.id} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs ${isEnabled ? 'bg-blue-50 text-blue-800' : 'bg-stone-100 text-stone-400 line-through'}`}>
+                  <button onClick={() => onOverride(event.id, { enabled: !isEnabled })} className={`w-5 h-3 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}>
+                    <span className={`absolute top-px w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-2.5' : 'left-px'}`} />
+                  </button>
+                  {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
+                  <span className="font-medium">{event.summary}</span>
+                  {people.map(p => (
+                    <span key={p} className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: PERSON_COLORS[p] || '#666' }} title={p} />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
