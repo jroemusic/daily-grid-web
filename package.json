@@ -13,6 +13,7 @@
     "seed:sample": "tsx scripts/seed-sample.ts"
   },
   "dependencies": {
+    "@hello-pangea/dnd": "^18.0.1",
     "@supabase/supabase-js": "^2.99.1",
     "date-fns": "^4.1.0",
     "googleapis": "^171.4.0",
