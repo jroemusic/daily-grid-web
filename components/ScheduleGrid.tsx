@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Schedule,
   Activity,
@@ -13,6 +13,8 @@ import {
   formatTimeDisplay,
   sortActivitiesByTime
 } from '@/lib/time';
+import { shiftActivitiesFrom, shiftSingleActivity } from '@/lib/shiftCascade';
+import ShiftMenu from './ShiftMenu';
 
 const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
 const PERSON_COLORS: Record<string, { bg: string; border: string; dot: string }> = {
@@ -55,6 +57,12 @@ export default function ScheduleGrid({
     isNew: boolean;
     defaults: { start: string; end: string; person: string } | null;
   }>({ active: false, activityIndex: -1, isNew: false, defaults: null });
+
+  const [shiftMenu, setShiftMenu] = useState<{
+    activity: Activity;
+    person: string;
+    position: { x: number; y: number };
+  } | null>(null);
 
   // Respond to external "new activity" trigger
   useEffect(() => {
@@ -172,6 +180,77 @@ export default function ScheduleGrid({
     setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: '07:00', end: '08:00', person: 'Jason' } });
   }
 
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  function handleCellPointerDown(e: React.TouchEvent | React.MouseEvent, activity: Activity, person: string) {
+    if (!editMode) return;
+    e.stopPropagation();
+
+    let x: number, y: number;
+    if ('touches' in e) { x = e.touches[0].clientX; y = e.touches[0].clientY; }
+    else { x = e.clientX; y = e.clientY; }
+    longPressStartRef.current = { x, y };
+
+    longPressTimerRef.current = setTimeout(() => {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setShiftMenu({ activity, person, position: { x: rect.left, y: rect.top } });
+    }, 500);
+  }
+
+  function handleCellPointerMove(e: React.TouchEvent | React.MouseEvent) {
+    if (!longPressStartRef.current || !longPressTimerRef.current) return;
+    let x: number, y: number;
+    if ('touches' in e) { x = e.touches[0].clientX; y = e.touches[0].clientY; }
+    else { x = e.clientX; y = e.clientY; }
+    const dx = x - longPressStartRef.current.x;
+    const dy = y - longPressStartRef.current.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 10) {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function handleCellPointerUp(e: React.TouchEvent | React.MouseEvent, person: string, rowStart: string, rowEnd: string) {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+      if (editMode) handleCellClick(person, rowStart, rowEnd);
+    }
+    longPressStartRef.current = null;
+  }
+
+  function handleCellPointerCancel() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    longPressStartRef.current = null;
+  }
+
+  function handleShift(shiftMinutes: number, cascade: boolean) {
+    if (!shiftMenu) return;
+    const { activity, person } = shiftMenu;
+
+    if (cascade && shiftMinutes !== 0) {
+      const updated = shiftActivitiesFrom(schedule.activities, person, activity.start, shiftMinutes);
+      for (let i = 0; i < updated.length; i++) {
+        if (JSON.stringify(updated[i]) !== JSON.stringify(schedule.activities[i])) {
+          onActivityUpdate(i, updated[i]);
+        }
+      }
+    } else if (!cascade && shiftMinutes !== 0) {
+      const updated = shiftSingleActivity(schedule.activities, activity.id, shiftMinutes);
+      for (let i = 0; i < updated.length; i++) {
+        if (JSON.stringify(updated[i]) !== JSON.stringify(schedule.activities[i])) {
+          onActivityUpdate(i, updated[i]);
+        }
+      }
+    }
+
+    setShiftMenu(null);
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1">
@@ -243,7 +322,14 @@ export default function ScheduleGrid({
                             color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
                             borderLeft: `3px solid ${personBorder}`
                           }}
-                          onClick={() => editMode && handleCellClick(person, row.start, row.end)}
+                          onTouchStart={e => handleCellPointerDown(e, activity, person)}
+                          onTouchMove={e => handleCellPointerMove(e)}
+                          onTouchEnd={e => handleCellPointerUp(e, person, row.start, row.end)}
+                          onTouchCancel={handleCellPointerCancel}
+                          onMouseDown={e => handleCellPointerDown(e, activity, person)}
+                          onMouseMove={e => handleCellPointerMove(e)}
+                          onMouseUp={e => handleCellPointerUp(e, person, row.start, row.end)}
+                          onMouseLeave={handleCellPointerCancel}
                         >
                           <div className="flex items-center gap-1.5 justify-center">
                             <button
@@ -297,6 +383,18 @@ export default function ScheduleGrid({
           onAdd={onActivityAdd}
           onRemove={onActivityRemove}
           onClose={() => setEditState({ active: false, activityIndex: -1, isNew: false, defaults: null })}
+        />
+      )}
+
+      {/* Shift cascade menu */}
+      {shiftMenu && (
+        <ShiftMenu
+          activity={shiftMenu.activity}
+          person={shiftMenu.person}
+          allActivities={schedule.activities}
+          position={shiftMenu.position}
+          onShift={handleShift}
+          onClose={() => setShiftMenu(null)}
         />
       )}
     </div>
