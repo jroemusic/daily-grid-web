@@ -195,7 +195,6 @@ export default function ScheduleGrid({
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
 
   function handleCellPointerDown(e: React.TouchEvent | React.MouseEvent, activity: Activity, person: string) {
-    if (!editMode) return;
     e.stopPropagation();
 
     let x: number, y: number;
@@ -486,15 +485,14 @@ function DraggableActivityCell({
         borderLeft: `3px solid ${personBorder}`,
         position: 'relative' as const,
       }}
-      onTouchStart={onPointerDown}
-      onTouchMove={onPointerMove}
-      onTouchEnd={onPointerUp}
-      onTouchCancel={onPointerCancel}
-      onMouseDown={onPointerDown}
-      onMouseMove={onPointerMove}
-      onMouseUp={onPointerUp}
-      onMouseLeave={onPointerCancel}
-      {...listeners}
+      onTouchStart={(e: any) => { onPointerDown(e); (listeners as any).onTouchStart?.(e); }}
+      onTouchMove={(e: any) => { onPointerMove(e); (listeners as any).onTouchMove?.(e); }}
+      onTouchEnd={(e: any) => { onPointerUp(e); (listeners as any).onTouchEnd?.(e); }}
+      onTouchCancel={(e: any) => { onPointerCancel(); (listeners as any).onTouchCancel?.(e); }}
+      onMouseDown={(e: any) => { onPointerDown(e); (listeners as any).onMouseDown?.(e); }}
+      onMouseMove={(e: any) => { onPointerMove(e); (listeners as any).onMouseMove?.(e); }}
+      onMouseUp={(e: any) => { onPointerUp(e); (listeners as any).onMouseUp?.(e); }}
+      onMouseLeave={(e: any) => { onPointerCancel(); (listeners as any).onMouseLeave?.(e); }}
       {...attributes}
     >
       <div className="flex items-center gap-1.5 justify-center">

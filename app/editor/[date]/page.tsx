@@ -13,7 +13,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [editMode, setEditMode] = useState(true);
+  const editMode = true; // Always edit mode — family kiosk
   const [triggerNewActivity, setTriggerNewActivity] = useState(0);
   const [templates, setTemplates] = useState<{ name: string; displayName: string }[]>([]);
   const [currentTime, setCurrentTime] = useState('');
@@ -389,12 +389,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
                 {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : ''}
               </span>
             )}
-            <button onClick={() => setEditMode(!editMode)} className={`px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide transition ${editMode ? 'bg-stone-800 text-white' : 'bg-stone-200 text-stone-600'}`}>
-              {editMode ? 'EDIT' : 'VIEW'}
-            </button>
-            {editMode && (
-              <button onClick={() => setTriggerNewActivity(n => n + 1)} className="bg-emerald-600 text-white px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide hover:bg-emerald-700 transition">+ ADD</button>
-            )}
+            <button onClick={() => setTriggerNewActivity(n => n + 1)} className="bg-emerald-600 text-white px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide hover:bg-emerald-700 transition">+ ADD</button>
             <MoreMenu editMode={editMode} templates={templates} onLoadTemplate={loadTemplate} onRefreshCalendar={refreshCalendar} onPrint={() => openPrintableView(schedule)} onSaveAsTemplate={() => setShowSaveTemplate(true)} />
           </div>
         </div>
