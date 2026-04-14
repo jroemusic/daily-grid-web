@@ -18,6 +18,8 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [templates, setTemplates] = useState<{ name: string; displayName: string }[]>([]);
   const [currentTime, setCurrentTime] = useState('');
   const [countdown, setCountdown] = useState('');
+  const undoStack = useRef<Activity[][]>([]);
+  const [canUndo, setCanUndo] = useState(false);
 
   // Clock + countdown — update every second
   // currentTimeForGrid is HH:MM format for string comparisons in ScheduleGrid
@@ -211,6 +213,9 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
   const handleActivityUpdate = useCallback((index: number, updates: Partial<Activity>) => {
     if (!schedule) return;
+    undoStack.current.push(schedule.activities.map(a => ({ ...a })));
+    if (undoStack.current.length > 20) undoStack.current.shift();
+    setCanUndo(true);
     const newActivities = [...schedule.activities];
     newActivities[index] = { ...newActivities[index], ...updates };
     setSchedule({ ...schedule, activities: newActivities });
@@ -218,6 +223,9 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
   const handleActivityAdd = useCallback((start: string, end: string, person: string) => {
     if (!schedule) return;
+    undoStack.current.push(schedule.activities.map(a => ({ ...a })));
+    if (undoStack.current.length > 20) undoStack.current.shift();
+    setCanUndo(true);
     const newActivity: Activity = {
       id: `act-${Date.now()}`,
       title: 'New Activity',
@@ -235,6 +243,9 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
   const handleActivityRemove = useCallback((index: number) => {
     if (!schedule) return;
+    undoStack.current.push(schedule.activities.map(a => ({ ...a })));
+    if (undoStack.current.length > 20) undoStack.current.shift();
+    setCanUndo(true);
     setSchedule({
       ...schedule,
       activities: schedule.activities.filter((_, i) => i !== index)
@@ -368,6 +379,13 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const displayDate = formatDate(schedule.date);
   const dayName = getDayName(schedule.date);
 
+  function handleUndo() {
+    if (undoStack.current.length === 0) return;
+    const prev = undoStack.current.pop()!;
+    setCanUndo(undoStack.current.length > 0);
+    setSchedule({ ...schedule!, activities: prev });
+  }
+
   return (
     <div className="h-screen flex flex-col bg-stone-100 overflow-hidden">
       {/* Thin header: date | clock + countdown | controls */}
@@ -384,6 +402,17 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
             <span className="text-xs font-semibold text-stone-400 tabular-nums bg-stone-100 px-2 py-0.5 rounded-full">{countdown}</span>
           </div>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={handleUndo}
+              disabled={!canUndo}
+              className={`px-3 py-1.5 rounded-md text-sm font-bold transition ${
+                canUndo
+                  ? 'bg-orange-500 text-white hover:bg-orange-600 active:scale-95'
+                  : 'bg-stone-100 text-stone-300 cursor-not-allowed'
+              }`}
+            >
+              Undo
+            </button>
             {editMode && (
               <span className={`text-[10px] font-semibold tracking-wide transition-opacity ${saveStatus === 'saving' ? 'text-orange-500' : saveStatus === 'saved' ? 'text-green-500' : 'text-transparent'}`}>
                 {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : ''}

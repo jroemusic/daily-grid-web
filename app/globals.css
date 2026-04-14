@@ -74,6 +74,16 @@ option {
   color: var(--text-primary);
 }
 
+/* Touch drag: prevent browser scroll/zoom on draggable cells and all their children */
+td[style*="touch-action: none"],
+td[style*="touch-action:none"] {
+  touch-action: none;
+}
+td[style*="touch-action: none"] *,
+td[style*="touch-action:none"] * {
+  touch-action: none;
+}
+
 /* Custom utility classes for consistent theming */
 .text-primary { color: var(--text-primary); }
 .text-secondary { color: var(--text-secondary); }

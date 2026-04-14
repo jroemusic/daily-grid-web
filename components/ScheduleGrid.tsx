@@ -16,7 +16,6 @@ import {
 } from '@/lib/time';
 import { shiftActivitiesFrom, shiftSingleActivity } from '@/lib/shiftCascade';
 import ShiftMenu from './ShiftMenu';
-import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core';
 
 const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
 const PERSON_COLORS: Record<string, { bg: string; border: string; dot: string }> = {
@@ -32,14 +31,26 @@ const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
 
 interface ScheduleGridProps {
   schedule: Schedule;
-  currentTime: string; // passed from parent
+  currentTime: string;
   onActivityUpdate: (index: number, updates: Partial<Activity>) => void;
   onActivityAdd: (start: string, end: string, person: string) => void;
   onActivityRemove: (index: number) => void;
   onToggleComplete: (index: number) => void;
   onCalendarEventOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
   editMode: boolean;
-  triggerNewActivity?: number; // increment to open new activity modal
+  triggerNewActivity?: number;
+}
+
+interface DragState {
+  activity: Activity;
+  person: string;
+  fromRowStart: string;
+  fromRowEnd: string;
+  pointerId: number;
+  currentX: number;
+  currentY: number;
+  overPerson: string | null;
+  overRowStart: string | null;
 }
 
 export default function ScheduleGrid({
@@ -66,14 +77,32 @@ export default function ScheduleGrid({
     position: { x: number; y: number };
   } | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        delay: 500,
-        tolerance: 5,
-      },
-    })
-  );
+  const [dragState, setDragState] = useState<DragState | null>(null);
+
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
+  const longPressFiredRef = useRef(false);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const isDraggingRef = useRef(false);
+
+  // Non-passive touchmove listener to prevent scrolling during drag/long-press.
+  // Uses a ref to avoid stale closure — the handler always reads the current value.
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+    const handler = (e: TouchEvent) => {
+      if (isDraggingRef.current || longPressStartRef.current) {
+        e.preventDefault();
+      }
+    };
+    el.addEventListener('touchmove', handler, { passive: false });
+    return () => el.removeEventListener('touchmove', handler);
+  }, []);
+
+  // Keep isDraggingRef in sync with dragState
+  useEffect(() => {
+    isDraggingRef.current = dragState !== null;
+  }, [dragState]);
 
   // Respond to external "new activity" trigger
   useEffect(() => {
@@ -100,7 +129,6 @@ export default function ScheduleGrid({
     }
   }
 
-  // Helper: get resolved people for a calendar event (override > default)
   function getEventPeople(event: CalendarEvent): string[] {
     if (event.overridePeople) return event.overridePeople;
     if (event.people) return event.people;
@@ -110,7 +138,7 @@ export default function ScheduleGrid({
 
   const calEventRows = new Map<string, CalendarEvent>();
   for (const event of schedule.calendarEvents || []) {
-    if (event.enabled === false) continue; // disabled via override
+    if (event.enabled === false) continue;
     const evtStart = timeToMinutes(isoToHHMM(event.start));
     const evtEnd = timeToMinutes(isoToHHMM(event.end));
     const eventPeople = getEventPeople(event);
@@ -186,49 +214,158 @@ export default function ScheduleGrid({
     }
   }
 
-  /** Called from parent to open modal for new activity */
-  function openNewActivityModal() {
-    setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: '07:00', end: '08:00', person: 'Jason' } });
+  /** Find which cell (person + row) is at a given x,y position */
+  function findCellAtPosition(x: number, y: number): { person: string; rowStart: string; rowEnd: string } | null {
+    if (!tableRef.current) return null;
+    const rows = tableRef.current.querySelectorAll('tbody tr');
+    for (const row of Array.from(rows)) {
+      const cells = row.querySelectorAll('td');
+      // cells[0] is time, cells[1..4] are people
+      for (let i = 1; i < cells.length; i++) {
+        const rect = cells[i].getBoundingClientRect();
+        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+          const person = PEOPLE[i - 1];
+          const timeCell = cells[0];
+          const text = timeCell.textContent || '';
+          // Find row start/end from the data
+          const rowEl = row as HTMLTableRowElement;
+          // Use uniqueRows to find matching row
+          const rowIdx = Array.from(rows).indexOf(row);
+          if (rowIdx >= 0 && rowIdx < uniqueRows.length) {
+            return { person, rowStart: uniqueRows[rowIdx].start, rowEnd: uniqueRows[rowIdx].end };
+          }
+        }
+      }
+    }
+    return null;
   }
 
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+  function handleCellPointerDown(
+    e: React.PointerEvent,
+    activity: Activity,
+    person: string,
+    rowStart: string,
+    rowEnd: string
+  ) {
+    const { pointerId, clientX: x, clientY: y } = e;
+    longPressStartRef.current = { x, y, pointerId };
+    longPressFiredRef.current = false;
 
-  function handleCellPointerDown(e: React.TouchEvent | React.MouseEvent, activity: Activity, person: string) {
-    e.preventDefault(); // Prevent browser's native long-press menu
-    e.stopPropagation();
+    // Capture the pointer so we keep receiving move/up even if finger leaves the cell
+    (e.currentTarget as HTMLElement).setPointerCapture(pointerId);
 
-    let x: number, y: number;
-    if ('touches' in e) { x = e.touches[0].clientX; y = e.touches[0].clientY; }
-    else { x = e.clientX; y = e.clientY; }
-    longPressStartRef.current = { x, y };
+    // Capture element position now (currentTarget nullified after handler returns)
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const pos = { x: rect.left, y: rect.top };
 
     longPressTimerRef.current = setTimeout(() => {
-      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-      setShiftMenu({ activity, person, position: { x: rect.left, y: rect.top } });
+      longPressFiredRef.current = true;
+      setShiftMenu({ activity, person, position: pos });
     }, 500);
   }
 
-  function handleCellPointerMove(e: React.TouchEvent | React.MouseEvent) {
-    if (!longPressStartRef.current || !longPressTimerRef.current) return;
-    let x: number, y: number;
-    if ('touches' in e) { x = e.touches[0].clientX; y = e.touches[0].clientY; }
-    else { x = e.clientX; y = e.clientY; }
+  function handleCellPointerMove(
+    e: React.PointerEvent,
+    sourceActivity: Activity,
+    sourcePerson: string,
+    sourceRowStart: string,
+    sourceRowEnd: string
+  ) {
+    if (!longPressStartRef.current) return;
+    const { clientX: x, clientY: y } = e;
     const dx = x - longPressStartRef.current.x;
     const dy = y - longPressStartRef.current.y;
-    if (Math.sqrt(dx * dx + dy * dy) > 10) {
-      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    // Threshold crossed for the first time — cancel long-press timer and start drag
+    if (dist > 10 && longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
+
+      // If the shift menu was already showing, dismiss it
+      if (longPressFiredRef.current) {
+        setShiftMenu(null);
+        longPressFiredRef.current = false;
+      }
+
+      const target = findCellAtPosition(x, y);
+      setDragState({
+        activity: sourceActivity,
+        person: sourcePerson,
+        fromRowStart: sourceRowStart,
+        fromRowEnd: sourceRowEnd,
+        pointerId: longPressStartRef.current.pointerId,
+        currentX: x,
+        currentY: y,
+        overPerson: target?.person || null,
+        overRowStart: target?.rowStart || null,
+      });
+    } else if (dist > 10 && !longPressTimerRef.current && !longPressFiredRef.current) {
+      // Already dragging — just update position
+      const target = findCellAtPosition(x, y);
+      setDragState(prev => prev ? {
+        ...prev,
+        currentX: x,
+        currentY: y,
+        overPerson: target?.person || null,
+        overRowStart: target?.rowStart || null,
+      } : null);
     }
   }
 
-  function handleCellPointerUp(e: React.TouchEvent | React.MouseEvent, person: string, rowStart: string, rowEnd: string) {
+  function handleCellPointerUp(person: string, rowStart: string, rowEnd: string) {
+    // If a drag is active, perform the drop (swap)
+    if (dragState && dragState.overPerson && dragState.overRowStart) {
+      const sourceActivity = dragState.activity;
+      const targetPerson = dragState.overPerson;
+      const targetStart = dragState.overRowStart;
+
+      // Don't drop on same position
+      if (!(targetPerson === dragState.person && targetStart === dragState.fromRowStart)) {
+        const duration = timeToMinutes(sourceActivity.end) - timeToMinutes(sourceActivity.start);
+
+        // Find target activity (if any) for swap
+        const targetActivity = schedule.activities.find(a =>
+          a.id !== sourceActivity.id &&
+          a.people.includes(targetPerson) &&
+          a.start === targetStart
+        );
+
+        // Move source to target
+        const sourceIdx = schedule.activities.findIndex(a => a.id === sourceActivity.id);
+        if (sourceIdx >= 0) {
+          onActivityUpdate(sourceIdx, {
+            start: targetStart,
+            end: minutesToTime(timeToMinutes(targetStart) + duration),
+            people: [targetPerson],
+          });
+        }
+
+        // Swap target to source position
+        if (targetActivity) {
+          const targetIdx = schedule.activities.findIndex(a => a.id === targetActivity.id);
+          if (targetIdx >= 0) {
+            const targetDuration = timeToMinutes(targetActivity.end) - timeToMinutes(targetActivity.start);
+            onActivityUpdate(targetIdx, {
+              start: sourceActivity.start,
+              end: minutesToTime(timeToMinutes(sourceActivity.start) + targetDuration),
+            });
+          }
+        }
+      }
+      setDragState(null);
+      longPressStartRef.current = null;
+      return;
+    }
+
+    // Normal tap (short press, no move) → open edit modal
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
-      if (editMode) handleCellClick(person, rowStart, rowEnd);
+      if (editMode && !longPressFiredRef.current) handleCellClick(person, rowStart, rowEnd);
     }
     longPressStartRef.current = null;
+    setDragState(null);
   }
 
   function handleCellPointerCancel() {
@@ -237,6 +374,8 @@ export default function ScheduleGrid({
       longPressTimerRef.current = null;
     }
     longPressStartRef.current = null;
+    setDragState(null);
+    setShiftMenu(null);
   }
 
   function handleShift(shiftMinutes: number, cascade: boolean) {
@@ -262,58 +401,10 @@ export default function ScheduleGrid({
     setShiftMenu(null);
   }
 
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over) return;
-
-    const sourceId = active.id as string;
-    const targetKey = over.id as string;
-
-    const sourceActivity = schedule.activities.find(a => a.id === sourceId);
-    if (!sourceActivity) return;
-
-    const parts = targetKey.split('-');
-    if (parts.length < 3) return;
-    const targetPerson = parts[0];
-    const targetStart = parts[1];
-
-    const duration = timeToMinutes(sourceActivity.end) - timeToMinutes(sourceActivity.start);
-
-    // Find if target cell has an activity for this person
-    const targetActivity = schedule.activities.find(a =>
-      a.id !== sourceId &&
-      a.people.includes(targetPerson) &&
-      a.start === targetStart
-    );
-
-    // Move source to target
-    const sourceIdx = schedule.activities.findIndex(a => a.id === sourceId);
-    if (sourceIdx >= 0) {
-      onActivityUpdate(sourceIdx, {
-        start: targetStart,
-        end: minutesToTime(timeToMinutes(targetStart) + duration),
-        people: [targetPerson],
-      });
-    }
-
-    // Swap target to source position
-    if (targetActivity) {
-      const targetIdx = schedule.activities.findIndex(a => a.id === targetActivity.id);
-      if (targetIdx >= 0) {
-        const targetDuration = timeToMinutes(targetActivity.end) - timeToMinutes(targetActivity.start);
-        onActivityUpdate(targetIdx, {
-          start: sourceActivity.start,
-          end: minutesToTime(timeToMinutes(sourceActivity.start) + targetDuration),
-        });
-      }
-    }
-  }
-
   return (
     <div className="h-full flex flex-col">
       <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1">
-        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-        <table className="w-full border-collapse">
+        <table ref={tableRef} className="w-full border-collapse" onContextMenu={e => e.preventDefault()}>
           <thead>
             <tr className="sticky top-0 z-10">
               <th className="bg-stone-800 text-stone-300 px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase w-28 sticky top-0">
@@ -331,6 +422,7 @@ export default function ScheduleGrid({
             {uniqueRows.map((row, rowIdx) => {
               const isCurrent = currentTime >= row.start && currentTime < row.end;
               const isPast = currentTime >= row.end;
+              const isDragTarget = dragState?.overRowStart === row.start;
               return (
                 <tr
                   key={`${row.start}-${row.end}`}
@@ -355,7 +447,9 @@ export default function ScheduleGrid({
                   {PEOPLE.map(person => {
                     const cellData = getCellContent(person, row.start, row.end);
                     const calEvent = getCalEvent(person, row.start, row.end);
-                    // Calendar events take priority
+                    const isDragSource = dragState?.activity?.id === cellData?.activity?.id;
+                    const isDragOver = dragState?.overPerson === person && dragState?.overRowStart === row.start;
+
                     if (calEvent) {
                       return (
                         <td
@@ -373,33 +467,66 @@ export default function ScheduleGrid({
                       const typeColor = ACTIVITY_COLORS[activity.type] || '#ffffff';
                       const personBorder = PERSON_COLORS[person]?.border || '#d1d5db';
                       return (
-                        <DraggableActivityCell
+                        <td
                           key={person}
-                          activity={activity}
-                          person={person}
-                          rowStart={row.start}
-                          rowEnd={row.end}
-                          editMode={editMode}
-                          typeColor={typeColor}
-                          personBorder={personBorder}
-                          onToggleComplete={() => onToggleComplete(index)}
-                          onPointerDown={e => handleCellPointerDown(e, activity, person)}
-                          onPointerMove={e => handleCellPointerMove(e)}
-                          onPointerUp={e => handleCellPointerUp(e, person, row.start, row.end)}
+                          className={`px-3 py-2.5 text-center text-sm align-middle transition-all ${
+                            activity.completed ? 'opacity-40' : ''
+                          } ${isDragSource ? 'opacity-40 ring-2 ring-orange-400' : ''} ${
+                            isDragOver && !isDragSource ? 'ring-2 ring-orange-300 ring-inset bg-orange-50' : ''
+                          } ${editMode ? 'cursor-pointer hover:brightness-95' : ''}`}
+                          style={{
+                            backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
+                            color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
+                            borderLeft: `3px solid ${personBorder}`,
+                            position: 'relative' as const,
+                            userSelect: 'none',
+                            WebkitUserSelect: 'none',
+                            WebkitTouchCallout: 'none',
+                            touchAction: 'none',
+                          }}
+                          onPointerDown={e => handleCellPointerDown(e, activity, person, row.start, row.end)}
+                          onPointerMove={e => handleCellPointerMove(e, activity, person, row.start, row.end)}
+                          onPointerUp={() => handleCellPointerUp(person, row.start, row.end)}
                           onPointerCancel={handleCellPointerCancel}
-                        />
+                          onContextMenu={e => e.preventDefault()}
+                        >
+                          <div className="flex items-center gap-1.5 justify-center">
+                            <button
+                              onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
+                              className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-all ${
+                                activity.completed
+                                  ? 'bg-green-500 text-white'
+                                  : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
+                              }`}
+                              title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
+                              onPointerDown={e => e.stopPropagation()}
+                            >
+                              {activity.completed && (
+                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                  <path d="M2 6l3 3 5-5" />
+                                </svg>
+                              )}
+                            </button>
+                            <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
+                              {activity.title}
+                            </span>
+                          </div>
+                        </td>
                       );
                     }
                     return (
-                      <DroppableCell
+                      <td
                         key={person}
-                        person={person}
-                        rowStart={row.start}
-                        rowEnd={row.end}
-                        editMode={editMode}
-                        personBorderColor={PERSON_COLORS[person]?.border || '#e7e5e4'}
+                        className={`px-3 py-3 text-center align-middle transition-all ${
+                          isDragOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''
+                        } ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
+                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33` }}
                         onClick={() => handleCellClick(person, row.start, row.end)}
-                      />
+                      >
+                        {editMode && (
+                          <span className="text-stone-200 text-xs opacity-0 hover:opacity-100 transition-opacity text-lg leading-none">+</span>
+                        )}
+                      </td>
                     );
                   })}
                 </tr>
@@ -407,8 +534,26 @@ export default function ScheduleGrid({
             })}
           </tbody>
         </table>
-        </DndContext>
       </div>
+
+      {/* Drag ghost overlay */}
+      {dragState && (
+        <div
+          className="fixed pointer-events-none z-50 px-3 py-2 rounded-xl shadow-2xl ring-2 ring-orange-400 opacity-80"
+          style={{
+            left: dragState.currentX,
+            top: dragState.currentY - 20,
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: ACTIVITY_COLORS[dragState.activity.type] || '#fff',
+            color: getTypeTextColor(dragState.activity.type),
+            whiteSpace: 'nowrap',
+            fontSize: '14px',
+            fontWeight: 600,
+          }}
+        >
+          {dragState.activity.title}
+        </div>
+      )}
 
       {/* Activity Modal */}
       {editState.active && (
@@ -450,106 +595,6 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   family: 'Family', school: 'School', activity: 'Activity', break: 'Break', other: 'Other'
 };
 
-function DraggableActivityCell({
-  activity, person, rowStart, rowEnd, editMode, typeColor, personBorder,
-  onToggleComplete, onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
-}: {
-  activity: Activity;
-  person: string;
-  rowStart: string;
-  rowEnd: string;
-  editMode: boolean;
-  typeColor: string;
-  personBorder: string;
-  onToggleComplete: () => void;
-  onPointerDown: (e: any) => void;
-  onPointerMove: (e: any) => void;
-  onPointerUp: (e: any) => void;
-  onPointerCancel: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: activity.id,
-    disabled: !editMode,
-  });
-
-  return (
-    <td
-      ref={setNodeRef}
-      className={`px-3 py-2.5 text-center text-sm align-middle transition-all ${
-        activity.completed ? 'opacity-40' : ''
-      } ${isDragging ? 'opacity-60 shadow-lg ring-2 ring-orange-400 scale-105' : ''} ${
-        editMode ? 'cursor-pointer hover:brightness-95' : ''
-      }`}
-      style={{
-        backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
-        color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
-        borderLeft: `3px solid ${personBorder}`,
-        position: 'relative' as const,
-      }}
-      onTouchStart={(e: any) => { onPointerDown(e); (listeners as any).onTouchStart?.(e); }}
-      onTouchMove={(e: any) => { onPointerMove(e); (listeners as any).onTouchMove?.(e); }}
-      onTouchEnd={(e: any) => { onPointerUp(e); (listeners as any).onTouchEnd?.(e); }}
-      onTouchCancel={(e: any) => { onPointerCancel(); (listeners as any).onTouchCancel?.(e); }}
-      onMouseDown={(e: any) => { onPointerDown(e); (listeners as any).onMouseDown?.(e); }}
-      onMouseMove={(e: any) => { onPointerMove(e); (listeners as any).onMouseMove?.(e); }}
-      onMouseUp={(e: any) => { onPointerUp(e); (listeners as any).onMouseUp?.(e); }}
-      onMouseLeave={(e: any) => { onPointerCancel(); (listeners as any).onMouseLeave?.(e); }}
-      onContextMenu={e => e.preventDefault()}
-      {...attributes}
-    >
-      <div className="flex items-center gap-1.5 justify-center">
-        <button
-          onClick={e => { e.stopPropagation(); onToggleComplete(); }}
-          className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-all ${
-            activity.completed
-              ? 'bg-green-500 text-white'
-              : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
-          }`}
-          title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
-        >
-          {activity.completed && (
-            <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M2 6l3 3 5-5" />
-            </svg>
-          )}
-        </button>
-        <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
-          {activity.title}
-        </span>
-      </div>
-    </td>
-  );
-}
-
-function DroppableCell({
-  person, rowStart, rowEnd, editMode, personBorderColor, onClick,
-}: {
-  person: string;
-  rowStart: string;
-  rowEnd: string;
-  editMode: boolean;
-  personBorderColor: string;
-  onClick: () => void;
-}) {
-  const cellKey = `${person}-${rowStart}-${rowEnd}`;
-  const { setNodeRef, isOver } = useDroppable({ id: cellKey });
-
-  return (
-    <td
-      ref={setNodeRef}
-      className={`px-3 py-3 text-center align-middle transition-all ${
-        isOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''
-      } ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
-      style={{ borderLeft: `3px solid ${personBorderColor}33` }}
-      onClick={onClick}
-    >
-      {editMode && (
-        <span className="text-stone-200 text-xs opacity-0 hover:opacity-100 transition-opacity text-lg leading-none">+</span>
-      )}
-    </td>
-  );
-}
-
 function ActivityModal({
   schedule,
   editState,
@@ -579,7 +624,7 @@ function ActivityModal({
   function togglePerson(person: string) {
     setSelectedPeople(prev => {
       if (prev.includes(person)) {
-        if (prev.length === 1) return prev; // must keep at least 1
+        if (prev.length === 1) return prev;
         return prev.filter(p => p !== person);
       }
       return [...prev, person];
@@ -590,9 +635,7 @@ function ActivityModal({
     if (!title.trim()) return;
     if (editState.isNew) {
       onAdd(start, end, selectedPeople[0] || 'Jason');
-      // After adding, update with full details
-      // The add creates a basic activity, then we update the last one
-      const newIdx = schedule.activities.length; // will be the new index
+      const newIdx = schedule.activities.length;
       setTimeout(() => {
         onUpdate(newIdx, {
           title: title.trim(), start, end, type,
@@ -614,18 +657,12 @@ function ActivityModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      {/* Backdrop */}
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-
-      {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-        {/* Header */}
         <div className="flex justify-between items-center mb-5">
           <h2 className="text-lg font-bold text-stone-800">{editState.isNew ? 'New Activity' : 'Edit Activity'}</h2>
           <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none">&times;</button>
         </div>
-
-        {/* Title */}
         <div className="mb-4">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Title</label>
           <input
@@ -636,8 +673,6 @@ function ActivityModal({
             onKeyDown={e => { if (e.key === 'Enter' && title.trim()) handleSave(); if (e.key === 'Escape') onClose(); }}
           />
         </div>
-
-        {/* Time */}
         <div className="mb-4">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Time</label>
           <div className="flex gap-2 items-center">
@@ -648,8 +683,6 @@ function ActivityModal({
               className="flex-1 border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 outline-none text-center" />
           </div>
         </div>
-
-        {/* Who */}
         <div className="mb-4">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Who</label>
           <div className="flex gap-2">
@@ -672,8 +705,6 @@ function ActivityModal({
             })}
           </div>
         </div>
-
-        {/* Type */}
         <div className="mb-4">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Type</label>
           <div className="flex flex-wrap gap-1.5">
@@ -691,8 +722,6 @@ function ActivityModal({
             ))}
           </div>
         </div>
-
-        {/* Notes */}
         <div className="mb-5">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Notes</label>
           <input
@@ -701,8 +730,6 @@ function ActivityModal({
             placeholder="Optional notes..."
           />
         </div>
-
-        {/* Actions */}
         <div className="flex gap-2">
           <button
             onClick={handleSave}
