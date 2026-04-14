@@ -74,16 +74,6 @@ option {
   color: var(--text-primary);
 }
 
-/* Touch drag: prevent browser scroll/zoom on draggable cells and all their children */
-td[style*="touch-action: none"],
-td[style*="touch-action:none"] {
-  touch-action: none;
-}
-td[style*="touch-action: none"] *,
-td[style*="touch-action:none"] * {
-  touch-action: none;
-}
-
 /* Custom utility classes for consistent theming */
 .text-primary { color: var(--text-primary); }
 .text-secondary { color: var(--text-secondary); }
@@ -97,16 +87,35 @@ td[style*="touch-action:none"] * {
 .border-default { border-color: var(--border-light); }
 .shadow-card { box-shadow: var(--shadow-md); }
 
-/* Smooth transitions */
-* {
+/* Touch-optimized: only transition interactive elements, not all 80+ grid cells */
+button, a, input, select, textarea, .transition-colors {
   transition-property: background-color, border-color, color, fill, stroke;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 150ms;
 }
 
+/* Disable all transitions during active drag */
+.dragging-active * {
+  transition: none !important;
+}
+
 /* Remove transition on page load for initial render */
 .initial-load * {
   transition: none !important;
+}
+
+/* Touch optimizations */
+html, body {
+  overscroll-behavior: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+/* Touch-specific: show hover-only elements on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .touch-show {
+    opacity: 1 !important;
+  }
 }
 
 /* Print styles - hide toolbar, landscape, preserve colors */

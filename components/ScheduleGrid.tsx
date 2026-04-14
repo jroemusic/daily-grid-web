@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Schedule,
   Activity,
@@ -29,6 +29,9 @@ const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
   return `${hour.toString().padStart(2, '0')}:00`;
 });
 
+const DRAG_THRESHOLD = 6; // px before drag activates (prevents accidental drags)
+const GHOST_OFFSET_Y = -70; // px above finger so user can see the ghost
+
 interface ScheduleGridProps {
   schedule: Schedule;
   currentTime: string;
@@ -47,8 +50,6 @@ interface DragState {
   fromRowStart: string;
   fromRowEnd: string;
   pointerId: number;
-  currentX: number;
-  currentY: number;
   overPerson: string | null;
   overRowStart: string | null;
 }
@@ -78,31 +79,45 @@ export default function ScheduleGrid({
   } | null>(null);
 
   const [dragState, setDragState] = useState<DragState | null>(null);
+  const [moveMode, setMoveMode] = useState(false);
 
-  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressStartRef = useRef<{ x: number; y: number; pointerId: number } | null>(null);
-  const longPressFiredRef = useRef(false);
   const tableRef = useRef<HTMLTableElement>(null);
-  const isDraggingRef = useRef(false);
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Non-passive touchmove listener to prevent scrolling during drag/long-press.
-  // Uses a ref to avoid stale closure — the handler always reads the current value.
+  // Drag tracking — all imperative, no React state per pixel
+  const dragDataRef = useRef<{
+    activity: Activity;
+    person: string;
+    fromRowStart: string;
+    fromRowEnd: string;
+    pointerId: number;
+    startX: number;
+    startY: number;
+    active: boolean; // becomes true after threshold
+  } | null>(null);
+
+  // Cached cell bounding rects — computed once on drag start
+  const cachedRectsRef = useRef<Array<{
+    person: string;
+    rowStart: string;
+    rowEnd: string;
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+  }> | null>(null);
+
+  // Prevent scroll during drag via non-passive touchmove on table
   useEffect(() => {
     const el = tableRef.current;
     if (!el) return;
     const handler = (e: TouchEvent) => {
-      if (isDraggingRef.current || longPressStartRef.current) {
-        e.preventDefault();
-      }
+      if (dragDataRef.current) e.preventDefault();
     };
     el.addEventListener('touchmove', handler, { passive: false });
     return () => el.removeEventListener('touchmove', handler);
   }, []);
-
-  // Keep isDraggingRef in sync with dragState
-  useEffect(() => {
-    isDraggingRef.current = dragState !== null;
-  }, [dragState]);
 
   // Respond to external "new activity" trigger
   useEffect(() => {
@@ -110,6 +125,13 @@ export default function ScheduleGrid({
       setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: '07:00', end: '08:00', person: 'Jason' } });
     }
   }, [triggerNewActivity]);
+
+  // Add dragging-active class to container during drag for CSS transition disabling
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.classList.toggle('dragging-active', dragState !== null);
+    }
+  }, [dragState]);
 
   function isoToHHMM(iso: string): string {
     if (!iso.includes('T')) return iso;
@@ -214,30 +236,87 @@ export default function ScheduleGrid({
     }
   }
 
-  /** Find which cell (person + row) is at a given x,y position */
-  function findCellAtPosition(x: number, y: number): { person: string; rowStart: string; rowEnd: string } | null {
-    if (!tableRef.current) return null;
+  /** Cache all cell bounding rects once (called on drag start) */
+  function cacheCellRects() {
+    if (!tableRef.current) return;
     const rows = tableRef.current.querySelectorAll('tbody tr');
-    for (const row of Array.from(rows)) {
-      const cells = row.querySelectorAll('td');
-      // cells[0] is time, cells[1..4] are people
+    const rects: typeof cachedRectsRef.current = [];
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      const cells = rows[rowIdx].querySelectorAll('td');
+      if (rowIdx >= uniqueRows.length) continue;
+      const row = uniqueRows[rowIdx];
       for (let i = 1; i < cells.length; i++) {
         const rect = cells[i].getBoundingClientRect();
-        if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
-          const person = PEOPLE[i - 1];
-          const timeCell = cells[0];
-          const text = timeCell.textContent || '';
-          // Find row start/end from the data
-          const rowEl = row as HTMLTableRowElement;
-          // Use uniqueRows to find matching row
-          const rowIdx = Array.from(rows).indexOf(row);
-          if (rowIdx >= 0 && rowIdx < uniqueRows.length) {
-            return { person, rowStart: uniqueRows[rowIdx].start, rowEnd: uniqueRows[rowIdx].end };
-          }
-        }
+        rects.push({
+          person: PEOPLE[i - 1],
+          rowStart: row.start,
+          rowEnd: row.end,
+          left: rect.left,
+          right: rect.right,
+          top: rect.top,
+          bottom: rect.bottom,
+        });
+      }
+    }
+    cachedRectsRef.current = rects;
+  }
+
+  /** Find which cell is at position using cached rects (no DOM queries) */
+  function findCellAtPosition(x: number, y: number): { person: string; rowStart: string; rowEnd: string } | null {
+    const rects = cachedRectsRef.current;
+    if (!rects) return null;
+    for (const r of rects) {
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        return { person: r.person, rowStart: r.rowStart, rowEnd: r.rowEnd };
       }
     }
     return null;
+  }
+
+  /** Move ghost element via imperative DOM (no React state) */
+  function moveGhost(x: number, y: number) {
+    const ghost = ghostRef.current;
+    if (!ghost) return;
+    ghost.style.transform = `translate3d(${x}px, ${y + GHOST_OFFSET_Y}px, 0)`;
+  }
+
+  function showGhost(activity: Activity) {
+    const ghost = ghostRef.current;
+    if (!ghost) return;
+    ghost.textContent = activity.title;
+    ghost.style.backgroundColor = ACTIVITY_COLORS[activity.type] || '#fff';
+    ghost.style.color = getTypeTextColor(activity.type);
+    ghost.style.display = 'block';
+  }
+
+  function hideGhost() {
+    const ghost = ghostRef.current;
+    if (!ghost) return;
+    ghost.style.display = 'none';
+  }
+
+  // Highlight management — imperative DOM to avoid React re-renders
+  const highlightRef = useRef<{ person: string; rowStart: string } | null>(null);
+
+  function setHighlight(person: string | null, rowStart: string | null) {
+    // Remove old highlight
+    if (highlightRef.current) {
+      const old = tableRef.current?.querySelector(
+        `td[data-cell="${highlightRef.current.person}-${highlightRef.current.rowStart}"]`
+      );
+      if (old) {
+        old.classList.remove('ring-2', 'ring-orange-300', 'ring-inset', 'bg-orange-50');
+      }
+      highlightRef.current = null;
+    }
+    // Add new highlight
+    if (person && rowStart) {
+      const cell = tableRef.current?.querySelector(`td[data-cell="${person}-${rowStart}"]`);
+      if (cell) {
+        cell.classList.add('ring-2', 'ring-orange-300', 'ring-inset', 'bg-orange-50');
+      }
+      highlightRef.current = { person, rowStart };
+    }
   }
 
   function handleCellPointerDown(
@@ -247,97 +326,104 @@ export default function ScheduleGrid({
     rowStart: string,
     rowEnd: string
   ) {
+    if (!moveMode) return;
     const { pointerId, clientX: x, clientY: y } = e;
-    longPressStartRef.current = { x, y, pointerId };
-    longPressFiredRef.current = false;
 
-    // Capture the pointer so we keep receiving move/up even if finger leaves the cell
+    // Capture pointer
     (e.currentTarget as HTMLElement).setPointerCapture(pointerId);
 
-    // Capture element position now (currentTarget nullified after handler returns)
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const pos = { x: rect.left, y: rect.top };
+    // Prevent browser context menu on long-press
+    e.preventDefault();
 
-    longPressTimerRef.current = setTimeout(() => {
-      longPressFiredRef.current = true;
-      setShiftMenu({ activity, person, position: pos });
-    }, 500);
+    // Store start data but don't activate drag yet (threshold check)
+    dragDataRef.current = {
+      activity,
+      person,
+      fromRowStart: rowStart,
+      fromRowEnd: rowEnd,
+      pointerId,
+      startX: x,
+      startY: y,
+      active: false,
+    };
   }
 
-  function handleCellPointerMove(
-    e: React.PointerEvent,
-    sourceActivity: Activity,
-    sourcePerson: string,
-    sourceRowStart: string,
-    sourceRowEnd: string
-  ) {
-    if (!longPressStartRef.current) return;
+  function handleCellPointerMove(e: React.PointerEvent) {
+    const drag = dragDataRef.current;
+    if (!drag || !moveMode) return;
+
     const { clientX: x, clientY: y } = e;
-    const dx = x - longPressStartRef.current.x;
-    const dy = y - longPressStartRef.current.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
 
-    // Threshold crossed for the first time — cancel long-press timer and start drag
-    if (dist > 10 && longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
+    // Check threshold before activating drag
+    if (!drag.active) {
+      const dx = x - drag.startX;
+      const dy = y - drag.startY;
+      if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
 
-      // If the shift menu was already showing, dismiss it
-      if (longPressFiredRef.current) {
-        setShiftMenu(null);
-        longPressFiredRef.current = false;
-      }
+      // Threshold crossed — activate drag
+      drag.active = true;
+      cacheCellRects();
+      showGhost(drag.activity);
 
-      const target = findCellAtPosition(x, y);
+      // Set React state once for drag mode UI (source cell dimming, etc.)
       setDragState({
-        activity: sourceActivity,
-        person: sourcePerson,
-        fromRowStart: sourceRowStart,
-        fromRowEnd: sourceRowEnd,
-        pointerId: longPressStartRef.current.pointerId,
-        currentX: x,
-        currentY: y,
-        overPerson: target?.person || null,
-        overRowStart: target?.rowStart || null,
+        activity: drag.activity,
+        person: drag.person,
+        fromRowStart: drag.fromRowStart,
+        fromRowEnd: drag.fromRowEnd,
+        pointerId: drag.pointerId,
+        overPerson: drag.person,
+        overRowStart: drag.fromRowStart,
       });
-    } else if (dist > 10 && !longPressTimerRef.current && !longPressFiredRef.current) {
-      // Already dragging — just update position
-      const target = findCellAtPosition(x, y);
-      setDragState(prev => prev ? {
-        ...prev,
-        currentX: x,
-        currentY: y,
-        overPerson: target?.person || null,
-        overRowStart: target?.rowStart || null,
-      } : null);
+
+      // Haptic feedback
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(30);
+      }
+    }
+
+    // Move ghost imperatively (no React state)
+    moveGhost(x, y);
+
+    // Find target cell from cached rects
+    const target = findCellAtPosition(x, y);
+
+    // Update highlight imperatively
+    setHighlight(target?.person || null, target?.rowStart || null);
+
+    // Update drag state only for overPerson/overRowStart (used on drop)
+    if (target) {
+      dragDataRef.current = { ...drag, person: drag.person }; // keep identity, just for reference
+      // Store latest target in a simple ref for drop
+      (dragDataRef.current as any).lastTarget = target;
     }
   }
 
-  function handleCellPointerUp(person: string, rowStart: string, rowEnd: string) {
-    // If a drag is active, perform the drop (swap)
-    if (dragState && dragState.overPerson && dragState.overRowStart) {
-      const sourceActivity = dragState.activity;
-      const targetPerson = dragState.overPerson;
-      const targetStart = dragState.overRowStart;
+  function handleCellPointerUp() {
+    const drag = dragDataRef.current;
+    if (!drag) return;
 
-      // Don't drop on same position
-      if (!(targetPerson === dragState.person && targetStart === dragState.fromRowStart)) {
+    if (drag.active) {
+      // Perform drop
+      const target: { person: string; rowStart: string } | null = (drag as any).lastTarget || null;
+      if (target && !(target.person === drag.person && target.rowStart === drag.fromRowStart)) {
+        const sourceActivity = drag.activity;
         const duration = timeToMinutes(sourceActivity.end) - timeToMinutes(sourceActivity.start);
 
-        // Find target activity (if any) for swap
+        // Find target activity for swap
         const targetActivity = schedule.activities.find(a =>
           a.id !== sourceActivity.id &&
-          a.people.includes(targetPerson) &&
-          a.start === targetStart
+          a.people.includes(target.person) &&
+          a.start === target.rowStart
         );
 
         // Move source to target
         const sourceIdx = schedule.activities.findIndex(a => a.id === sourceActivity.id);
         if (sourceIdx >= 0) {
           onActivityUpdate(sourceIdx, {
-            start: targetStart,
-            end: minutesToTime(timeToMinutes(targetStart) + duration),
-            people: [targetPerson],
+            start: target.rowStart,
+            end: minutesToTime(timeToMinutes(target.rowStart) + duration),
+            people: [target.person],
           });
         }
 
@@ -352,30 +438,28 @@ export default function ScheduleGrid({
             });
           }
         }
+
+        // Haptic on drop
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(20);
+        }
       }
-      setDragState(null);
-      longPressStartRef.current = null;
-      return;
+
+      hideGhost();
+      setHighlight(null, null);
+      cachedRectsRef.current = null;
     }
 
-    // Normal tap (short press, no move) → open edit modal
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-      if (editMode && !longPressFiredRef.current) handleCellClick(person, rowStart, rowEnd);
-    }
-    longPressStartRef.current = null;
+    dragDataRef.current = null;
     setDragState(null);
   }
 
   function handleCellPointerCancel() {
-    if (longPressTimerRef.current) {
-      clearTimeout(longPressTimerRef.current);
-      longPressTimerRef.current = null;
-    }
-    longPressStartRef.current = null;
+    dragDataRef.current = null;
+    hideGhost();
+    setHighlight(null, null);
+    cachedRectsRef.current = null;
     setDragState(null);
-    setShiftMenu(null);
   }
 
   function handleShift(shiftMinutes: number, cascade: boolean) {
@@ -401,10 +485,71 @@ export default function ScheduleGrid({
     setShiftMenu(null);
   }
 
+  // Long-press handler for shift menu
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
+
+  function handleActivityTouchStart(
+    e: React.TouchEvent,
+    activity: Activity,
+    person: string,
+  ) {
+    if (moveMode || !editMode) return;
+    const touch = e.touches[0];
+    longPressStartRef.current = { x: touch.clientX, y: touch.clientY };
+
+    longPressTimerRef.current = setTimeout(() => {
+      // Haptic feedback
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      setShiftMenu({ activity, person, position: { x: rect.left, y: rect.top } });
+      longPressTimerRef.current = null;
+    }, 350);
+  }
+
+  function handleActivityTouchMove(e: React.TouchEvent) {
+    if (!longPressTimerRef.current || !longPressStartRef.current) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - longPressStartRef.current.x;
+    const dy = touch.clientY - longPressStartRef.current.y;
+    if (Math.sqrt(dx * dx + dy * dy) > 10) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
+  function handleActivityTouchEnd() {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  }
+
   return (
-    <div className="h-full flex flex-col">
-      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1">
-        <table ref={tableRef} className="w-full border-collapse" onContextMenu={e => e.preventDefault()}>
+    <div ref={containerRef} className="h-full flex flex-col">
+      {/* Move mode toggle + shift controls */}
+      <div className="flex items-center gap-2 mb-1 px-1">
+        <button
+          onClick={() => { setMoveMode(m => !m); setDragState(null); }}
+          className={`px-4 py-2.5 rounded-md text-sm font-bold transition-colors ${
+            moveMode
+              ? 'bg-blue-600 text-white ring-2 ring-blue-300'
+              : 'bg-stone-100 text-stone-500'
+          }`}
+          style={{ touchAction: 'manipulation' }}
+        >
+          {moveMode ? '↕ Moving ON — drag activities' : '↕ Move'}
+        </button>
+        {moveMode && (
+          <span className="text-xs text-stone-400">Tap & drag an activity to a new slot.</span>
+        )}
+      </div>
+      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        <table ref={tableRef} className="w-full border-collapse">
           <thead>
             <tr className="sticky top-0 z-10">
               <th className="bg-stone-800 text-stone-300 px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase w-28 sticky top-0">
@@ -422,11 +567,11 @@ export default function ScheduleGrid({
             {uniqueRows.map((row, rowIdx) => {
               const isCurrent = currentTime >= row.start && currentTime < row.end;
               const isPast = currentTime >= row.end;
-              const isDragTarget = dragState?.overRowStart === row.start;
+              const isDragSource = dragState?.activity?.id != null && getCellContent(dragState.person, row.start, row.end)?.activity?.id === dragState.activity.id;
               return (
                 <tr
                   key={`${row.start}-${row.end}`}
-                  className={`border-b border-stone-100 last:border-0 transition-opacity ${
+                  className={`border-b border-stone-100 last:border-0 ${
                     isPast ? 'opacity-40' :
                     isCurrent ? 'bg-orange-50' :
                     rowIdx % 2 === 1 ? 'bg-stone-50/50' : ''
@@ -447,14 +592,12 @@ export default function ScheduleGrid({
                   {PEOPLE.map(person => {
                     const cellData = getCellContent(person, row.start, row.end);
                     const calEvent = getCalEvent(person, row.start, row.end);
-                    const isDragSource = dragState?.activity?.id === cellData?.activity?.id;
-                    const isDragOver = dragState?.overPerson === person && dragState?.overRowStart === row.start;
 
                     if (calEvent) {
                       return (
                         <td
                           key={person}
-                          className="px-3 py-2.5 text-center text-sm align-middle"
+                          className="px-3 py-3 text-center text-sm align-middle"
                           style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}
                           title={`${calEvent.summary}${calEvent.location ? ' @ ' + calEvent.location : ''}`}
                         >
@@ -469,11 +612,12 @@ export default function ScheduleGrid({
                       return (
                         <td
                           key={person}
-                          className={`px-3 py-2.5 text-center text-sm align-middle transition-all ${
+                          data-cell={`${person}-${row.start}`}
+                          className={`px-3 py-3 text-center text-sm align-middle ${
                             activity.completed ? 'opacity-40' : ''
                           } ${isDragSource ? 'opacity-40 ring-2 ring-orange-400' : ''} ${
-                            isDragOver && !isDragSource ? 'ring-2 ring-orange-300 ring-inset bg-orange-50' : ''
-                          } ${editMode ? 'cursor-pointer hover:brightness-95' : ''}`}
+                            editMode ? (moveMode ? 'cursor-grab' : 'cursor-pointer') : ''
+                          }`}
                           style={{
                             backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
                             color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
@@ -481,35 +625,58 @@ export default function ScheduleGrid({
                             position: 'relative' as const,
                             userSelect: 'none',
                             WebkitUserSelect: 'none',
-                            WebkitTouchCallout: 'none',
-                            touchAction: 'none',
+                            ...(moveMode ? { touchAction: 'none' } : { touchAction: 'manipulation' }),
                           }}
-                          onPointerDown={e => handleCellPointerDown(e, activity, person, row.start, row.end)}
-                          onPointerMove={e => handleCellPointerMove(e, activity, person, row.start, row.end)}
-                          onPointerUp={() => handleCellPointerUp(person, row.start, row.end)}
-                          onPointerCancel={handleCellPointerCancel}
-                          onContextMenu={e => e.preventDefault()}
+                          onPointerDown={moveMode ? (e => handleCellPointerDown(e, activity, person, row.start, row.end)) : undefined}
+                          onPointerMove={moveMode ? handleCellPointerMove : undefined}
+                          onPointerUp={moveMode ? handleCellPointerUp : undefined}
+                          onPointerCancel={moveMode ? handleCellPointerCancel : undefined}
+                          onClick={!moveMode ? (() => handleCellClick(person, row.start, row.end)) : undefined}
+                          onContextMenu={moveMode ? (e => e.preventDefault()) : undefined}
+                          onTouchStart={!moveMode && editMode ? (e => handleActivityTouchStart(e, activity, person)) : undefined}
+                          onTouchMove={!moveMode && editMode ? handleActivityTouchMove : undefined}
+                          onTouchEnd={!moveMode && editMode ? handleActivityTouchEnd : undefined}
                         >
-                          <div className="flex items-center gap-1.5 justify-center">
-                            <button
-                              onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
-                              className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-all ${
-                                activity.completed
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
-                              }`}
-                              title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
-                              onPointerDown={e => e.stopPropagation()}
-                            >
-                              {activity.completed && (
-                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <path d="M2 6l3 3 5-5" />
-                                </svg>
-                              )}
-                            </button>
+                          <div className="flex items-center gap-1.5 justify-center"
+                            style={moveMode ? { touchAction: 'none', pointerEvents: 'none' } : {}}
+                          >
+                            {!moveMode && (
+                              <button
+                                onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
+                                className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-colors ${
+                                  activity.completed
+                                    ? 'bg-green-500 text-white'
+                                    : 'bg-white/60 border border-stone-300'
+                                }`}
+                                title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
+                                style={{ touchAction: 'manipulation' }}
+                              >
+                                {activity.completed && (
+                                  <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                    <path d="M2 6l3 3 5-5" />
+                                  </svg>
+                                )}
+                              </button>
+                            )}
                             <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
                               {activity.title}
                             </span>
+                            {!moveMode && (
+                              <button
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  const rect = (e.currentTarget.closest('td') as HTMLElement).getBoundingClientRect();
+                                  setShiftMenu({ activity, person, position: { x: rect.left, y: rect.top } });
+                                }}
+                                className="ml-auto opacity-40 hover:opacity-100 text-stone-400 hover:text-orange-500 touch-show transition-opacity"
+                                title="Shift times"
+                                style={{ touchAction: 'manipulation', minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                              >
+                                <svg viewBox="0 0 16 16" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2">
+                                  <path d="M4 8l4-4 4 4M4 12l4-4 4 4" />
+                                </svg>
+                              </button>
+                            )}
                           </div>
                         </td>
                       );
@@ -517,14 +684,16 @@ export default function ScheduleGrid({
                     return (
                       <td
                         key={person}
-                        className={`px-3 py-3 text-center align-middle transition-all ${
-                          isDragOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''
-                        } ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
-                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33` }}
+                        data-cell={`${person}-${row.start}`}
+                        className={`px-3 py-3 text-center align-middle ${
+                          editMode ? 'cursor-pointer' : ''
+                        }`}
+                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33`, touchAction: 'manipulation' }}
                         onClick={() => handleCellClick(person, row.start, row.end)}
+                        onContextMenu={e => e.preventDefault()}
                       >
                         {editMode && (
-                          <span className="text-stone-200 text-xs opacity-0 hover:opacity-100 transition-opacity text-lg leading-none">+</span>
+                          <span className="text-stone-300 text-lg leading-none touch-show" style={{ opacity: 0.5 }}>+</span>
                         )}
                       </td>
                     );
@@ -536,24 +705,19 @@ export default function ScheduleGrid({
         </table>
       </div>
 
-      {/* Drag ghost overlay */}
-      {dragState && (
-        <div
-          className="fixed pointer-events-none z-50 px-3 py-2 rounded-xl shadow-2xl ring-2 ring-orange-400 opacity-80"
-          style={{
-            left: dragState.currentX,
-            top: dragState.currentY - 20,
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: ACTIVITY_COLORS[dragState.activity.type] || '#fff',
-            color: getTypeTextColor(dragState.activity.type),
-            whiteSpace: 'nowrap',
-            fontSize: '14px',
-            fontWeight: 600,
-          }}
-        >
-          {dragState.activity.title}
-        </div>
-      )}
+      {/* Drag ghost — always in DOM, positioned imperatively via transform */}
+      <div
+        ref={ghostRef}
+        className="fixed pointer-events-none z-50 px-3 py-2 rounded-xl shadow-2xl ring-2 ring-orange-400 opacity-80 font-semibold"
+        style={{
+          display: 'none',
+          transform: 'translate3d(0, 0, 0)',
+          willChange: 'transform',
+          whiteSpace: 'nowrap',
+          fontSize: '14px',
+          fontWeight: 600,
+        }}
+      />
 
       {/* Activity Modal */}
       {editState.active && (
@@ -655,13 +819,22 @@ function ActivityModal({
     onClose();
   }
 
+  const backdropDownRef = useRef(false);
+  const backdropStartRef = useRef<{ x: number; y: number } | null>(null);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={(e) => {
+        // Only close if click is directly on backdrop (not on modal content)
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
         <div className="flex justify-between items-center mb-5">
           <h2 className="text-lg font-bold text-stone-800">{editState.isNew ? 'New Activity' : 'Edit Activity'}</h2>
-          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 text-xl leading-none">&times;</button>
+          <button onClick={onClose} className="text-stone-400 hover:text-stone-600 p-2 text-xl leading-none" style={{ minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>&times;</button>
         </div>
         <div className="mb-4">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1.5">Title</label>
@@ -670,6 +843,7 @@ function ActivityModal({
             className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 focus:ring-1 focus:ring-stone-300 outline-none"
             placeholder="What's happening?"
             autoFocus
+            style={{ touchAction: 'manipulation' }}
             onKeyDown={e => { if (e.key === 'Enter' && title.trim()) handleSave(); if (e.key === 'Escape') onClose(); }}
           />
         </div>
@@ -692,12 +866,12 @@ function ActivityModal({
                 <button
                   key={person}
                   onClick={() => togglePerson(person)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-semibold transition-all border-2 ${
+                  className={`flex-1 py-3 rounded-xl text-sm font-semibold transition-colors border-2 ${
                     isActive
                       ? 'text-white border-transparent shadow-sm'
-                      : 'bg-white text-stone-400 border-stone-200 hover:border-stone-300'
+                      : 'bg-white text-stone-400 border-stone-200'
                   }`}
-                  style={isActive ? { backgroundColor: PERSON_COLORS[person]?.dot || '#666' } : {}}
+                  style={{ touchAction: 'manipulation', ...(isActive ? { backgroundColor: PERSON_COLORS[person]?.dot || '#666' } : {}) }}
                 >
                   {person}
                 </button>
@@ -712,10 +886,10 @@ function ActivityModal({
               <button
                 key={t}
                 onClick={() => setType(t)}
-                className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border-2 ${
-                  type === t ? 'border-stone-600 shadow-sm' : 'border-transparent opacity-60 hover:opacity-100'
+                className={`px-3 py-2 rounded-lg text-xs font-semibold transition-colors border-2 ${
+                  type === t ? 'border-stone-600 shadow-sm' : 'border-transparent opacity-60'
                 }`}
-                style={{ backgroundColor: color, color: getTypeTextColor(t) }}
+                style={{ backgroundColor: color, color: getTypeTextColor(t), touchAction: 'manipulation' }}
               >
                 {TYPE_LABELS[t]}
               </button>
@@ -728,20 +902,23 @@ function ActivityModal({
             type="text" value={notes} onChange={e => setNotes(e.target.value)}
             className="w-full border border-stone-300 rounded-xl px-3 py-2 text-sm focus:border-stone-500 outline-none"
             placeholder="Optional notes..."
+            style={{ touchAction: 'manipulation' }}
           />
         </div>
         <div className="flex gap-2">
           <button
             onClick={handleSave}
             disabled={!title.trim()}
-            className="flex-1 bg-stone-800 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-stone-700 transition disabled:opacity-40"
+            className="flex-1 bg-stone-800 text-white py-3 rounded-xl text-sm font-semibold hover:bg-stone-700 transition-colors disabled:opacity-40"
+            style={{ touchAction: 'manipulation' }}
           >
             {editState.isNew ? 'Add Activity' : 'Save Changes'}
           </button>
           {!editState.isNew && (
             <button
               onClick={() => { onRemove(editState.activityIndex); onClose(); }}
-              className="bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-red-100 transition"
+              className="bg-red-50 text-red-600 px-4 py-3 rounded-xl text-sm font-medium hover:bg-red-100 transition-colors"
+              style={{ touchAction: 'manipulation' }}
             >
               Delete
             </button>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use, useCallback, useRef } from 'react';
+import { useEffect, useState, use, useCallback, useRef, memo } from 'react';
 import Link from 'next/link';
 import { Schedule, Activity, ActivityType, ACTIVITY_COLORS, CalendarEvent } from '@/lib/types';
 import { getDayName, getTodayDate } from '@/lib/time';
@@ -21,14 +21,22 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const undoStack = useRef<Activity[][]>([]);
   const [canUndo, setCanUndo] = useState(false);
 
-  // Clock + countdown — update every second
-  // currentTimeForGrid is HH:MM format for string comparisons in ScheduleGrid
+  // currentTimeForGrid — only updates when the minute changes (not every second)
   const [currentTimeForGrid, setCurrentTimeForGrid] = useState('');
+  const lastGridMinuteRef = useRef(-1);
+
   useEffect(() => {
     function tick() {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
-      setCurrentTimeForGrid(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+
+      // Only update grid time when minute changes
+      const currentMinute = now.getHours() * 60 + now.getMinutes();
+      if (currentMinute !== lastGridMinuteRef.current) {
+        lastGridMinuteRef.current = currentMinute;
+        setCurrentTimeForGrid(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
+      }
+
       const minsUntilNextHour = 60 - now.getMinutes();
       const secsUntilNextHour = 60 - now.getSeconds();
       const totalSecs = minsUntilNextHour * 60 + secsUntilNextHour;
@@ -392,7 +400,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       <header className="bg-white border-b border-stone-200 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-4 h-12 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Link href="/" className="text-stone-400 hover:text-stone-600 text-xs font-medium tracking-wide">&larr;</Link>
+            <Link href="/" className="text-stone-400 hover:text-stone-600 text-xs font-medium tracking-wide" style={{ touchAction: 'manipulation', padding: 8 }}>&larr;</Link>
             <h1 className="text-sm font-bold text-stone-800 tracking-tight">
               {dayName} <span className="text-stone-400 font-normal mx-1">&mdash;</span> <span className="text-stone-500">{displayDate}</span>
             </h1>
@@ -405,20 +413,21 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
             <button
               onClick={handleUndo}
               disabled={!canUndo}
-              className={`px-3 py-1.5 rounded-md text-sm font-bold transition ${
+              className={`px-3 py-2 rounded-md text-sm font-bold transition-colors ${
                 canUndo
-                  ? 'bg-orange-500 text-white hover:bg-orange-600 active:scale-95'
+                  ? 'bg-orange-500 text-white active:scale-95'
                   : 'bg-stone-100 text-stone-300 cursor-not-allowed'
               }`}
+              style={{ touchAction: 'manipulation', minHeight: 44 }}
             >
               Undo
             </button>
             {editMode && (
-              <span className={`text-[10px] font-semibold tracking-wide transition-opacity ${saveStatus === 'saving' ? 'text-orange-500' : saveStatus === 'saved' ? 'text-green-500' : 'text-transparent'}`}>
+              <span className={`text-[10px] font-semibold tracking-wide transition-colors ${saveStatus === 'saving' ? 'text-orange-500' : saveStatus === 'saved' ? 'text-green-500' : 'text-transparent'}`}>
                 {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved' : ''}
               </span>
             )}
-            <button onClick={() => setTriggerNewActivity(n => n + 1)} className="bg-emerald-600 text-white px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide hover:bg-emerald-700 transition">+ ADD</button>
+            <button onClick={() => setTriggerNewActivity(n => n + 1)} className="bg-emerald-600 text-white px-3 py-2 rounded-md text-xs font-semibold tracking-wide hover:bg-emerald-700 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>+ ADD</button>
             <MoreMenu editMode={editMode} templates={templates} onLoadTemplate={loadTemplate} onRefreshCalendar={refreshCalendar} onPrint={() => openPrintableView(schedule)} onSaveAsTemplate={() => setShowSaveTemplate(true)} />
           </div>
         </div>
@@ -427,7 +436,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       {/* Progress hairline */}
       <div className="max-w-6xl mx-auto px-4">
         <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all" style={{
+          <div className="h-full rounded-full transition-colors" style={{
             width: `${(() => {
               if (!currentTime) return 0;
               const now = new Date();
@@ -459,21 +468,22 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
 
       {/* Save-as-template modal */}
       {showSaveTemplate && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-          <div className="bg-white rounded-xl shadow-xl p-4 w-64">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30" onClick={e => { if (e.target === e.currentTarget) setShowSaveTemplate(false); }}>
+          <div className="bg-white rounded-xl shadow-xl p-4 w-64" onClick={e => e.stopPropagation()}>
             <h3 className="text-sm font-bold text-stone-800 mb-2">Save as Template</h3>
             <input
               type="text"
               value={templateName}
               onChange={e => setTemplateName(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') saveAsTemplate(); if (e.key === 'Escape') setShowSaveTemplate(false); }}
-              className="w-full border border-stone-300 rounded-lg px-2.5 py-1.5 text-sm mb-2 focus:border-stone-500 outline-none"
+              className="w-full border border-stone-300 rounded-lg px-2.5 py-2 text-sm mb-2 focus:border-stone-500 outline-none"
               placeholder="Template name..."
               autoFocus
+              style={{ touchAction: 'manipulation' }}
             />
             <div className="flex gap-2">
-              <button onClick={() => setShowSaveTemplate(false)} className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-stone-200 text-stone-600 hover:bg-stone-300 transition">Cancel</button>
-              <button onClick={saveAsTemplate} disabled={!templateName.trim()} className="flex-1 px-2 py-1.5 rounded-lg text-xs font-semibold bg-stone-800 text-white disabled:opacity-50 hover:bg-stone-700 transition">Save</button>
+              <button onClick={() => setShowSaveTemplate(false)} className="flex-1 px-2 py-2.5 rounded-lg text-xs font-semibold bg-stone-200 text-stone-600 hover:bg-stone-300 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>Cancel</button>
+              <button onClick={saveAsTemplate} disabled={!templateName.trim()} className="flex-1 px-2 py-2.5 rounded-lg text-xs font-semibold bg-stone-800 text-white disabled:opacity-50 hover:bg-stone-700 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>Save</button>
             </div>
           </div>
         </div>
@@ -494,7 +504,7 @@ function MoreMenu({ editMode, templates, onLoadTemplate, onRefreshCalendar, onPr
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
-      <button onClick={() => setOpen(!open)} className="bg-stone-200 text-stone-600 px-2 py-1 rounded-md text-[11px] font-semibold tracking-wide hover:bg-stone-300 transition">&#8226;&#8226;&#8226;</button>
+      <button onClick={() => setOpen(!open)} className="bg-stone-200 text-stone-600 px-3 py-2 rounded-md text-xs font-semibold tracking-wide hover:bg-stone-300 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>&#8226;&#8226;&#8226;</button>
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
@@ -503,14 +513,14 @@ function MoreMenu({ editMode, templates, onLoadTemplate, onRefreshCalendar, onPr
               <div className="border-b border-stone-100">
                 <div className="px-3 py-1.5 text-[10px] font-semibold tracking-wider uppercase text-stone-400">Templates</div>
                 {templates.map(t => (
-                  <button key={t.name} onClick={() => { onLoadTemplate(t.name); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition">{t.displayName}</button>
+                  <button key={t.name} onClick={() => { onLoadTemplate(t.name); setOpen(false); }} className="w-full text-left px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>{t.displayName}</button>
                 ))}
               </div>
             )}
-            <button onClick={() => { onRefreshCalendar(); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition">Sync Calendar</button>
-            <button onClick={() => { onPrint(); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 transition">Print</button>
+            <button onClick={() => { onRefreshCalendar(); setOpen(false); }} className="w-full text-left px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>Sync Calendar</button>
+            <button onClick={() => { onPrint(); setOpen(false); }} className="w-full text-left px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>Print</button>
             {editMode && (
-              <button onClick={() => { onSaveAsTemplate(); setOpen(false); }} className="w-full text-left px-3 py-2 text-sm text-stone-700 hover:bg-stone-50 border-t border-stone-100 transition">Save as Template</button>
+              <button onClick={() => { onSaveAsTemplate(); setOpen(false); }} className="w-full text-left px-3 py-2.5 text-sm text-stone-700 hover:bg-stone-50 border-t border-stone-100 transition-colors" style={{ touchAction: 'manipulation', minHeight: 44 }}>Save as Template</button>
             )}
           </div>
         </>
@@ -548,7 +558,7 @@ function CalendarStrip({ events, onOverride }: {
           <>
             <div className="fixed inset-0 z-40" onClick={() => setExpandedEvent(null)} />
             <div className="absolute bottom-full left-4 right-4 bg-white rounded-t-xl border border-stone-200 shadow-xl z-50 px-4 py-3">
-              <div className="max-w-6xl mx-auto flex items-center gap-4">
+              <div className="max-w-6xl mx-auto flex items-center gap-4 flex-wrap">
                 <span className="text-sm font-semibold text-stone-700">{event.summary}</span>
                 <div className="flex gap-2">
                   {PEOPLE.map(person => {
@@ -561,24 +571,24 @@ function CalendarStrip({ events, onOverride }: {
                           if (next.length === 0) return;
                           onOverride(event.id, { overridePeople: next });
                         }}
-                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                        className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
                           isActive ? 'text-white shadow-sm' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
                         }`}
-                        style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
+                        style={{ touchAction: 'manipulation', minHeight: 44, ...(isActive ? { backgroundColor: PERSON_COLORS[person] } : {}) }}
                       >
                         {person}
                       </button>
                     );
                   })}
                 </div>
-                <button onClick={() => setExpandedEvent(null)} className="ml-auto text-stone-400 hover:text-stone-600 text-sm px-2">✕</button>
+                <button onClick={() => setExpandedEvent(null)} className="ml-auto text-stone-400 hover:text-stone-600 text-sm px-2 py-2" style={{ touchAction: 'manipulation', minHeight: 44, minWidth: 44 }}>✕</button>
               </div>
             </div>
           </>
         );
       })()}
-      {/* Single-row horizontal scroll */}
-      <div className="max-w-6xl mx-auto px-4 py-1.5 overflow-x-auto">
+      {/* Single-row horizontal scroll with snap */}
+      <div className="max-w-6xl mx-auto px-4 py-1.5 overflow-x-auto" style={{ scrollSnapType: 'x proximity', WebkitOverflowScrolling: 'touch' }}>
         <div className="flex gap-2">
           {events.map(event => {
             const isEnabled = event.enabled !== false;
@@ -586,11 +596,12 @@ function CalendarStrip({ events, onOverride }: {
             const time = event.start.includes('T') ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
             const isExpanded = expandedEvent === event.id;
             return (
-              <div key={event.id} className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] whitespace-nowrap flex-shrink-0 cursor-pointer ${isEnabled ? (isExpanded ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300' : 'bg-blue-50 text-blue-800') : 'bg-stone-100 text-stone-400 line-through'}`}
+              <div key={event.id} className={`flex items-center gap-1 px-2 py-1.5 rounded-full text-[11px] whitespace-nowrap flex-shrink-0 cursor-pointer ${isEnabled ? (isExpanded ? 'bg-blue-100 text-blue-800 ring-1 ring-blue-300' : 'bg-blue-50 text-blue-800') : 'bg-stone-100 text-stone-400 line-through'}`}
+                style={{ scrollSnapAlign: 'start', touchAction: 'manipulation', minHeight: 36 }}
                 onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
               >
-                <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-5 h-3 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}>
-                  <span className={`absolute top-px w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-2.5' : 'left-px'}`} />
+                <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-7 h-4 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`} style={{ touchAction: 'manipulation', minWidth: 44, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span className={`absolute top-px w-3 h-3 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-3' : 'left-px'}`} />
                 </button>
                 {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
                 <span className="font-medium">{event.summary}</span>
