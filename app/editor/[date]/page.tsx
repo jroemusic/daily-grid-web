@@ -20,10 +20,13 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [countdown, setCountdown] = useState('');
 
   // Clock + countdown — update every second
+  // currentTimeForGrid is HH:MM format for string comparisons in ScheduleGrid
+  const [currentTimeForGrid, setCurrentTimeForGrid] = useState('');
   useEffect(() => {
     function tick() {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit' }));
+      setCurrentTimeForGrid(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`);
       const minsUntilNextHour = 60 - now.getMinutes();
       const secsUntilNextHour = 60 - now.getSeconds();
       const totalSecs = minsUntilNextHour * 60 + secsUntilNextHour;
@@ -416,7 +419,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
       <main className="max-w-6xl mx-auto px-4 py-3 flex-1 overflow-hidden">
         <ScheduleGrid
           schedule={schedule}
-          currentTime={currentTime}
+          currentTime={currentTimeForGrid}
           onActivityUpdate={handleActivityUpdate}
           onActivityAdd={handleActivityAdd}
           onActivityRemove={handleActivityRemove}
@@ -531,7 +534,19 @@ function CalendarStrip({ events, onOverride }: {
                   {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
                   <span className="font-medium">{event.summary}</span>
                   {people.map(p => (
-                    <span key={p} className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: PERSON_COLORS[p] || '#666' }} title={p} />
+                    <button
+                      key={p}
+                      onClick={() => {
+                        const next = people.includes(p) ? people.filter(x => x !== p) : [...people, p];
+                        if (next.length === 0) return;
+                        onOverride(event.id, { overridePeople: next });
+                      }}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: PERSON_COLORS[p] || '#666' }}
+                      title={p}
+                    >
+                      {p[0]}
+                    </button>
                   ))}
                 </div>
               );
