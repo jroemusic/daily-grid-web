@@ -10,11 +10,13 @@ import {
 } from '@/lib/types';
 import {
   timeToMinutes,
+  minutesToTime,
   formatTimeDisplay,
   sortActivitiesByTime
 } from '@/lib/time';
 import { shiftActivitiesFrom, shiftSingleActivity } from '@/lib/shiftCascade';
 import ShiftMenu from './ShiftMenu';
+import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, useDraggable, useDroppable } from '@dnd-kit/core';
 
 const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
 const PERSON_COLORS: Record<string, { bg: string; border: string; dot: string }> = {
@@ -63,6 +65,15 @@ export default function ScheduleGrid({
     person: string;
     position: { x: number; y: number };
   } | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 500,
+        tolerance: 5,
+      },
+    })
+  );
 
   // Respond to external "new activity" trigger
   useEffect(() => {
@@ -251,9 +262,57 @@ export default function ScheduleGrid({
     setShiftMenu(null);
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+
+    const sourceId = active.id as string;
+    const targetKey = over.id as string;
+
+    const sourceActivity = schedule.activities.find(a => a.id === sourceId);
+    if (!sourceActivity) return;
+
+    const parts = targetKey.split('-');
+    if (parts.length < 3) return;
+    const targetPerson = parts[0];
+    const targetStart = parts[1];
+
+    const duration = timeToMinutes(sourceActivity.end) - timeToMinutes(sourceActivity.start);
+
+    // Find if target cell has an activity for this person
+    const targetActivity = schedule.activities.find(a =>
+      a.id !== sourceId &&
+      a.people.includes(targetPerson) &&
+      a.start === targetStart
+    );
+
+    // Move source to target
+    const sourceIdx = schedule.activities.findIndex(a => a.id === sourceId);
+    if (sourceIdx >= 0) {
+      onActivityUpdate(sourceIdx, {
+        start: targetStart,
+        end: minutesToTime(timeToMinutes(targetStart) + duration),
+        people: [targetPerson],
+      });
+    }
+
+    // Swap target to source position
+    if (targetActivity) {
+      const targetIdx = schedule.activities.findIndex(a => a.id === targetActivity.id);
+      if (targetIdx >= 0) {
+        const targetDuration = timeToMinutes(targetActivity.end) - timeToMinutes(targetActivity.start);
+        onActivityUpdate(targetIdx, {
+          start: sourceActivity.start,
+          end: minutesToTime(timeToMinutes(sourceActivity.start) + targetDuration),
+        });
+      }
+    }
+  }
+
   return (
     <div className="h-full flex flex-col">
       <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1">
+        <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <table className="w-full border-collapse">
           <thead>
             <tr className="sticky top-0 z-10">
@@ -314,57 +373,33 @@ export default function ScheduleGrid({
                       const typeColor = ACTIVITY_COLORS[activity.type] || '#ffffff';
                       const personBorder = PERSON_COLORS[person]?.border || '#d1d5db';
                       return (
-                        <td
+                        <DraggableActivityCell
                           key={person}
-                          className={`px-3 py-2.5 text-center text-sm align-middle transition-all ${activity.completed ? 'opacity-40' : ''} ${editMode ? 'cursor-pointer hover:brightness-95' : ''}`}
-                          style={{
-                            backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
-                            color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
-                            borderLeft: `3px solid ${personBorder}`
-                          }}
-                          onTouchStart={e => handleCellPointerDown(e, activity, person)}
-                          onTouchMove={e => handleCellPointerMove(e)}
-                          onTouchEnd={e => handleCellPointerUp(e, person, row.start, row.end)}
-                          onTouchCancel={handleCellPointerCancel}
-                          onMouseDown={e => handleCellPointerDown(e, activity, person)}
-                          onMouseMove={e => handleCellPointerMove(e)}
-                          onMouseUp={e => handleCellPointerUp(e, person, row.start, row.end)}
-                          onMouseLeave={handleCellPointerCancel}
-                        >
-                          <div className="flex items-center gap-1.5 justify-center">
-                            <button
-                              onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
-                              className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-all ${
-                                activity.completed
-                                  ? 'bg-green-500 text-white'
-                                  : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
-                              }`}
-                              title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
-                            >
-                              {activity.completed && (
-                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                  <path d="M2 6l3 3 5-5" />
-                                </svg>
-                              )}
-                            </button>
-                            <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
-                              {activity.title}
-                            </span>
-                          </div>
-                        </td>
+                          activity={activity}
+                          person={person}
+                          rowStart={row.start}
+                          rowEnd={row.end}
+                          editMode={editMode}
+                          typeColor={typeColor}
+                          personBorder={personBorder}
+                          onToggleComplete={() => onToggleComplete(index)}
+                          onPointerDown={e => handleCellPointerDown(e, activity, person)}
+                          onPointerMove={e => handleCellPointerMove(e)}
+                          onPointerUp={e => handleCellPointerUp(e, person, row.start, row.end)}
+                          onPointerCancel={handleCellPointerCancel}
+                        />
                       );
                     }
                     return (
-                      <td
+                      <DroppableCell
                         key={person}
-                        className={`px-3 py-3 text-center align-middle ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
-                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33` }}
+                        person={person}
+                        rowStart={row.start}
+                        rowEnd={row.end}
+                        editMode={editMode}
+                        personBorderColor={PERSON_COLORS[person]?.border || '#e7e5e4'}
                         onClick={() => handleCellClick(person, row.start, row.end)}
-                      >
-                        {editMode && (
-                          <span className="text-stone-200 text-xs opacity-0 hover:opacity-100 transition-opacity text-lg leading-none">+</span>
-                        )}
-                      </td>
+                      />
                     );
                   })}
                 </tr>
@@ -372,6 +407,7 @@ export default function ScheduleGrid({
             })}
           </tbody>
         </table>
+        </DndContext>
       </div>
 
       {/* Activity Modal */}
@@ -413,6 +449,106 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   routine: 'Routine', meal: 'Meal', personal: 'Personal', work: 'Work',
   family: 'Family', school: 'School', activity: 'Activity', break: 'Break', other: 'Other'
 };
+
+function DraggableActivityCell({
+  activity, person, rowStart, rowEnd, editMode, typeColor, personBorder,
+  onToggleComplete, onPointerDown, onPointerMove, onPointerUp, onPointerCancel,
+}: {
+  activity: Activity;
+  person: string;
+  rowStart: string;
+  rowEnd: string;
+  editMode: boolean;
+  typeColor: string;
+  personBorder: string;
+  onToggleComplete: () => void;
+  onPointerDown: (e: any) => void;
+  onPointerMove: (e: any) => void;
+  onPointerUp: (e: any) => void;
+  onPointerCancel: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: activity.id,
+    disabled: !editMode,
+  });
+
+  return (
+    <td
+      ref={setNodeRef}
+      className={`px-3 py-2.5 text-center text-sm align-middle transition-all ${
+        activity.completed ? 'opacity-40' : ''
+      } ${isDragging ? 'opacity-60 shadow-lg ring-2 ring-orange-400 scale-105' : ''} ${
+        editMode ? 'cursor-pointer hover:brightness-95' : ''
+      }`}
+      style={{
+        backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
+        color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
+        borderLeft: `3px solid ${personBorder}`,
+        position: 'relative' as const,
+      }}
+      onTouchStart={onPointerDown}
+      onTouchMove={onPointerMove}
+      onTouchEnd={onPointerUp}
+      onTouchCancel={onPointerCancel}
+      onMouseDown={onPointerDown}
+      onMouseMove={onPointerMove}
+      onMouseUp={onPointerUp}
+      onMouseLeave={onPointerCancel}
+      {...listeners}
+      {...attributes}
+    >
+      <div className="flex items-center gap-1.5 justify-center">
+        <button
+          onClick={e => { e.stopPropagation(); onToggleComplete(); }}
+          className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-all ${
+            activity.completed
+              ? 'bg-green-500 text-white'
+              : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
+          }`}
+          title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
+        >
+          {activity.completed && (
+            <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M2 6l3 3 5-5" />
+            </svg>
+          )}
+        </button>
+        <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
+          {activity.title}
+        </span>
+      </div>
+    </td>
+  );
+}
+
+function DroppableCell({
+  person, rowStart, rowEnd, editMode, personBorderColor, onClick,
+}: {
+  person: string;
+  rowStart: string;
+  rowEnd: string;
+  editMode: boolean;
+  personBorderColor: string;
+  onClick: () => void;
+}) {
+  const cellKey = `${person}-${rowStart}-${rowEnd}`;
+  const { setNodeRef, isOver } = useDroppable({ id: cellKey });
+
+  return (
+    <td
+      ref={setNodeRef}
+      className={`px-3 py-3 text-center align-middle transition-all ${
+        isOver ? 'bg-orange-50 ring-2 ring-orange-300 ring-inset' : ''
+      } ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
+      style={{ borderLeft: `3px solid ${personBorderColor}33` }}
+      onClick={onClick}
+    >
+      {editMode && (
+        <span className="text-stone-200 text-xs opacity-0 hover:opacity-100 transition-opacity text-lg leading-none">+</span>
+      )}
+    </td>
+  );
+}
 
 function ActivityModal({
   schedule,
