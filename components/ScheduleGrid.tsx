@@ -195,6 +195,7 @@ export default function ScheduleGrid({
   const longPressStartRef = useRef<{ x: number; y: number } | null>(null);
 
   function handleCellPointerDown(e: React.TouchEvent | React.MouseEvent, activity: Activity, person: string) {
+    e.preventDefault(); // Prevent browser's native long-press menu
     e.stopPropagation();
 
     let x: number, y: number;
@@ -493,6 +494,7 @@ function DraggableActivityCell({
       onMouseMove={(e: any) => { onPointerMove(e); (listeners as any).onMouseMove?.(e); }}
       onMouseUp={(e: any) => { onPointerUp(e); (listeners as any).onMouseUp?.(e); }}
       onMouseLeave={(e: any) => { onPointerCancel(); (listeners as any).onMouseLeave?.(e); }}
+      onContextMenu={e => e.preventDefault()}
       {...attributes}
     >
       <div className="flex items-center gap-1.5 justify-center">
