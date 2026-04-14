@@ -430,7 +430,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
         />
       </main>
 
-      {/* Calendar strip — compact, below the grid */}
+      {/* Calendar strip — fixed height, scrollable, pinned to bottom */}
       <CalendarStrip events={schedule.calendarEvents || []} onOverride={handleCalendarEventOverride} />
 
       {/* Save-as-template modal */}
@@ -500,7 +500,6 @@ function CalendarStrip({ events, onOverride }: {
   events: CalendarEvent[];
   onOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
 }) {
-  const [collapsed, setCollapsed] = useState(events.length === 0);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
   const PERSON_COLORS: Record<string, string> = { Jason: '#2563eb', Kay: '#db2777', Emma: '#16a34a', Toby: '#ea580c' };
@@ -515,66 +514,63 @@ function CalendarStrip({ events, onOverride }: {
   if (events.length === 0) return null;
 
   return (
-    <div className="max-w-6xl mx-auto px-4 pb-4">
-      <div className="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden">
-        <button onClick={() => setCollapsed(!collapsed)} className="w-full flex items-center gap-2 px-4 py-2 text-xs font-semibold text-stone-500 hover:bg-stone-50 transition">
-          <span className={`transition-transform ${collapsed ? '' : 'rotate-90'}`}>&#9654;</span>
-          Calendar ({events.length})
-        </button>
-        {!collapsed && (
-          <div className="px-4 pb-3 space-y-1.5">
-            {events.map(event => {
-              const isEnabled = event.enabled !== false;
-              const people = getEventPeople(event);
-              const time = event.start.includes('T') ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-              const isExpanded = expandedEvent === event.id;
-              return (
-                <div key={event.id}>
-                  <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-pointer ${isEnabled ? 'bg-blue-50 text-blue-800' : 'bg-stone-100 text-stone-400 line-through'}`}
-                    onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
-                  >
-                    <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-5 h-3 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}>
-                      <span className={`absolute top-px w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-2.5' : 'left-px'}`} />
-                    </button>
-                    {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
-                    <span className="font-medium">{event.summary}</span>
-                    <div className="flex gap-0.5 ml-auto">
-                      {people.map(p => (
-                        <span key={p} className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: PERSON_COLORS[p] || '#666' }} title={p} />
-                      ))}
-                    </div>
-                    <span className={`text-stone-400 text-[10px] transition-transform ${isExpanded ? 'rotate-180' : ''}`}>&#9660;</span>
+    <div className="bg-white border-t border-stone-200 flex-shrink-0" style={{ maxHeight: '30vh' }}>
+      <div className="max-w-6xl mx-auto px-4 py-2 overflow-y-auto" style={{ maxHeight: '30vh' }}>
+        <div className="space-y-1">
+          {events.map(event => {
+            const isEnabled = event.enabled !== false;
+            const people = getEventPeople(event);
+            const time = event.start.includes('T') ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+            const isExpanded = expandedEvent === event.id;
+            return (
+              <div key={event.id}>
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs cursor-pointer ${isEnabled ? 'bg-blue-50 text-blue-800' : 'bg-stone-100 text-stone-400 line-through'}`}
+                  onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
+                >
+                  <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-5 h-3 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}>
+                    <span className={`absolute top-px w-2.5 h-2.5 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-2.5' : 'left-px'}`} />
+                  </button>
+                  {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
+                  <span className="font-medium">{event.summary}</span>
+                  <div className="flex gap-0.5 ml-auto">
+                    {people.map(p => (
+                      <span key={p} className="w-4 h-4 rounded-full flex-shrink-0 flex items-center justify-center text-[8px] font-bold text-white" style={{ backgroundColor: PERSON_COLORS[p] || '#666' }}>
+                        {p[0]}
+                      </span>
+                    ))}
                   </div>
-                  {isExpanded && (
-                    <div className="flex gap-1.5 mt-1 ml-8">
-                      {PEOPLE.map(person => {
-                        const isActive = people.includes(person);
-                        return (
-                          <button
-                            key={person}
-                            onClick={() => {
-                              const next = isActive ? people.filter(x => x !== person) : [...people, person];
-                              if (next.length === 0) return;
-                              onOverride(event.id, { overridePeople: next });
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                              isActive
-                                ? 'text-white shadow-sm'
-                                : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
-                            }`}
-                            style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
-                          >
-                            {person}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <span className={`text-stone-400 text-[10px] transition-transform ${isExpanded ? 'rotate-180' : ''}`}>&#9660;</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {isExpanded && (
+                  <div className="flex gap-1.5 mt-1 ml-8">
+                    {PEOPLE.map(person => {
+                      const isActive = people.includes(person);
+                      return (
+                        <button
+                          key={person}
+                          onClick={() => {
+                            const next = isActive ? people.filter(x => x !== person) : [...people, person];
+                            if (next.length === 0) return;
+                            onOverride(event.id, { overridePeople: next });
+                          }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            isActive
+                              ? 'text-white shadow-sm'
+                              : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                          }`}
+                          style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
+                        >
+                          {person}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
