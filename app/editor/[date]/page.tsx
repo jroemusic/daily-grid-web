@@ -514,40 +514,43 @@ function CalendarStrip({ events, onOverride }: {
   if (events.length === 0) return null;
 
   return (
-    <div className="bg-white border-t border-stone-200 flex-shrink-0">
-      {/* Expanded person chooser overlay */}
+    <div className="bg-white border-t border-stone-200 flex-shrink-0 relative">
+      {/* Person chooser popup */}
       {expandedEvent && (() => {
         const event = events.find(e => e.id === expandedEvent);
         if (!event) return null;
         const people = getEventPeople(event);
         return (
-          <div className="absolute bottom-full left-0 right-0 bg-white border-b border-stone-200 shadow-lg z-30 px-4 py-2">
-            <div className="max-w-6xl mx-auto flex items-center gap-3">
-              <span className="text-xs font-medium text-stone-600">{event.summary}</span>
-              <div className="flex gap-1.5">
-                {PEOPLE.map(person => {
-                  const isActive = people.includes(person);
-                  return (
-                    <button
-                      key={person}
-                      onClick={() => {
-                        const next = isActive ? people.filter(x => x !== person) : [...people, person];
-                        if (next.length === 0) return;
-                        onOverride(event.id, { overridePeople: next });
-                      }}
-                      className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-                        isActive ? 'text-white shadow-sm' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
-                      }`}
-                      style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
-                    >
-                      {person}
-                    </button>
-                  );
-                })}
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setExpandedEvent(null)} />
+            <div className="absolute bottom-full left-4 right-4 bg-white rounded-t-xl border border-stone-200 shadow-xl z-50 px-4 py-3">
+              <div className="max-w-6xl mx-auto flex items-center gap-4">
+                <span className="text-sm font-semibold text-stone-700">{event.summary}</span>
+                <div className="flex gap-2">
+                  {PEOPLE.map(person => {
+                    const isActive = people.includes(person);
+                    return (
+                      <button
+                        key={person}
+                        onClick={() => {
+                          const next = isActive ? people.filter(x => x !== person) : [...people, person];
+                          if (next.length === 0) return;
+                          onOverride(event.id, { overridePeople: next });
+                        }}
+                        className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                          isActive ? 'text-white shadow-sm' : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
+                        }`}
+                        style={isActive ? { backgroundColor: PERSON_COLORS[person] } : {}}
+                      >
+                        {person}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button onClick={() => setExpandedEvent(null)} className="ml-auto text-stone-400 hover:text-stone-600 text-sm px-2">✕</button>
               </div>
-              <button onClick={() => setExpandedEvent(null)} className="ml-auto text-stone-400 hover:text-stone-600 text-xs">✕</button>
             </div>
-          </div>
+          </>
         );
       })()}
       {/* Single-row horizontal scroll */}
