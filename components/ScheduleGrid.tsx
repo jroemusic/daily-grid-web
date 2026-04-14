@@ -28,6 +28,7 @@ const TIME_SLOTS = Array.from({ length: 16 }, (_, i) => {
 
 interface ScheduleGridProps {
   schedule: Schedule;
+  currentTime: string; // passed from parent
   onActivityUpdate: (index: number, updates: Partial<Activity>) => void;
   onActivityAdd: (start: string, end: string, person: string) => void;
   onActivityRemove: (index: number) => void;
@@ -39,6 +40,7 @@ interface ScheduleGridProps {
 
 export default function ScheduleGrid({
   schedule,
+  currentTime,
   onActivityUpdate,
   onActivityAdd,
   onActivityRemove,
@@ -52,23 +54,7 @@ export default function ScheduleGrid({
     activityIndex: number;
     isNew: boolean;
     defaults: { start: string; end: string; person: string } | null;
-  }>({ active: false, activityIndex: -1, isNew: false, defaults: null });  const [currentTime, setCurrentTime] = useState<string>('');
-  const [countdown, setCountdown] = useState<string>('');
-
-  useEffect(() => {
-    function updateTime() {
-      const now = new Date();
-      setCurrentTime(
-        `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`
-      );
-      const minsLeft = 59 - now.getMinutes();
-      const secsLeft = 59 - now.getSeconds();
-      setCountdown(`${minsLeft}:${secsLeft.toString().padStart(2, '0')}`);
-    }
-    updateTime();
-    const interval = setInterval(updateTime, 1000);
-    return () => clearInterval(interval);
-  }, []);
+  }>({ active: false, activityIndex: -1, isNew: false, defaults: null });
 
   // Respond to external "new activity" trigger
   useEffect(() => {
@@ -186,123 +172,17 @@ export default function ScheduleGrid({
     setEditState({ active: true, activityIndex: -1, isNew: true, defaults: { start: '07:00', end: '08:00', person: 'Jason' } });
   }
 
-  const completed = schedule.activities.filter(a => a.completed).length;
-  const total = schedule.activities.length;
-  const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
-
   return (
-    <div className="space-y-5">
-      {/* Status Bar: Countdown + Calendar Events side by side */}
-      {currentTime && (
-        <div className="flex gap-4">
-          {/* Countdown */}
-          <div className="flex-shrink-0 bg-white rounded-2xl p-4 shadow-sm border border-stone-200 text-center min-w-[140px]">
-            <div className="text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1">Next Hour</div>
-            <div className="text-3xl font-bold text-stone-700 tabular-nums tracking-tight">{countdown}</div>
-          </div>
-
-          {/* Calendar Events (interactive) */}
-          {schedule.calendarEvents && schedule.calendarEvents.length > 0 ? (
-            <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-blue-200 overflow-hidden">
-              <div className="text-[11px] font-semibold tracking-wider uppercase text-blue-400 mb-2">Calendar</div>
-              <div className="space-y-2">
-                {schedule.calendarEvents.map((event: CalendarEvent) => {
-                  const eventTime = event.start.includes('T')
-                    ? new Date(event.start).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                    : '';
-                  const eventEndTime = event.end.includes('T')
-                    ? new Date(event.end).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-                    : '';
-                  const isEnabled = event.enabled !== false;
-                  const eventPeople = getEventPeople(event);
-                  return (
-                    <div key={event.id} className={`rounded-lg p-2 transition-opacity ${isEnabled ? 'bg-blue-50' : 'bg-stone-100 opacity-50'}`}>
-                      <div className="flex items-center gap-2 mb-1">
-                        {/* Enable/disable toggle */}
-                        <button
-                          onClick={() => onCalendarEventOverride(event.id, { enabled: !isEnabled })}
-                          className={`w-7 h-4 rounded-full transition-colors relative flex-shrink-0 ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}
-                        >
-                          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform ${isEnabled ? 'left-3.5' : 'left-0.5'}`} />
-                        </button>
-                        <span className="font-mono text-[10px] font-semibold text-blue-600 min-w-[100px]">
-                          {eventTime}{eventEndTime && eventEndTime !== eventTime ? ` - ${eventEndTime}` : ''}
-                        </span>
-                        <span className="font-semibold text-stone-800 text-xs">{event.summary}</span>
-                        {event.source && <span className="text-stone-400 text-[10px] ml-auto flex-shrink-0">{event.source}</span>}
-                      </div>
-                      {/* Person toggles */}
-                      <div className="flex gap-1 ml-9">
-                        {PEOPLE.map(person => {
-                          const isActive = eventPeople.includes(person);
-                          return (
-                            <button
-                              key={person}
-                              onClick={() => {
-                                const current = eventPeople;
-                                const next = isActive
-                                  ? current.filter(p => p !== person)
-                                  : [...current, person];
-                                if (next.length === 0) return; // must have at least 1
-                                onCalendarEventOverride(event.id, { overridePeople: next });
-                              }}
-                              className={`px-1.5 py-0.5 rounded text-[10px] font-semibold transition-colors ${
-                                isActive
-                                  ? 'text-white'
-                                  : 'bg-stone-100 text-stone-400 hover:bg-stone-200'
-                              }`}
-                              style={isActive ? { backgroundColor: PERSON_COLORS[person]?.dot || '#666' } : {}}
-                            >
-                              {person}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-              <div className="text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-2">Calendar</div>
-              <div className="text-sm text-stone-400">No events today</div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Progress */}
-      {total > 0 && (
-        <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-200">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-[11px] font-semibold tracking-wider uppercase text-stone-400">Progress</span>
-            <span className="text-sm font-semibold text-stone-600">{completed}/{total} done</span>
-          </div>
-          <div className="h-2 bg-stone-100 rounded-full overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-700 ease-out"
-              style={{
-                width: `${percentage}%`,
-                background: percentage === 100
-                  ? '#22c55e'
-                  : 'linear-gradient(90deg, #f97316, #fb923c)'
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Grid */}
-      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden">
+    <div className="h-full flex flex-col">
+      <div className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1">
         <table className="w-full border-collapse">
           <thead>
-            <tr>
-              <th className="bg-stone-800 text-stone-300 px-3 py-2.5 text-center text-[11px] font-semibold tracking-wider uppercase w-24">
+            <tr className="sticky top-0 z-10">
+              <th className="bg-stone-800 text-stone-300 px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase w-28 sticky top-0">
                 Time
               </th>
               {PEOPLE.map(person => (
-                <th key={person} className="px-3 py-2.5 text-center text-[11px] font-semibold tracking-wider uppercase"
+                <th key={person} className="px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase sticky top-0"
                   style={{ backgroundColor: PERSON_COLORS[person].bg, color: PERSON_COLORS[person].dot }}>
                   {person}
                 </th>
@@ -312,18 +192,21 @@ export default function ScheduleGrid({
           <tbody>
             {uniqueRows.map((row, rowIdx) => {
               const isCurrent = currentTime >= row.start && currentTime < row.end;
+              const isPast = currentTime >= row.end;
               return (
                 <tr
                   key={`${row.start}-${row.end}`}
-                  className={`border-b border-stone-100 last:border-0 ${
-                    isCurrent ? 'bg-orange-50' : rowIdx % 2 === 1 ? 'bg-stone-50/50' : ''
+                  className={`border-b border-stone-100 last:border-0 transition-opacity ${
+                    isPast ? 'opacity-40' :
+                    isCurrent ? 'bg-orange-50' :
+                    rowIdx % 2 === 1 ? 'bg-stone-50/50' : ''
                   }`}
                 >
-                  <td className={`px-3 py-2 text-center text-xs font-semibold align-middle whitespace-nowrap ${isCurrent ? 'text-orange-600' : 'text-stone-400'}`}>
+                  <td className={`px-3 py-3 text-center text-sm font-semibold align-middle whitespace-nowrap ${isCurrent ? 'text-orange-600' : 'text-stone-400'}`}>
                     <div>
-                      {formatTimeDisplay(row.start).replace(':00', '').replace(' ', '')}
+                      {formatTimeDisplay(row.start).replace(':00', '').replace(' ', '').toLowerCase()}
                       <span className="text-stone-300 mx-0.5">-</span>
-                      {formatTimeDisplay(row.end).replace(':00', '').replace(' ', '')}
+                      {formatTimeDisplay(row.end).replace(':00', '').replace(' ', '').toLowerCase()}
                     </div>
                     {isCurrent && (
                       <span className="inline-block mt-0.5 bg-orange-500 text-white px-1.5 py-px rounded-full text-[9px] font-bold tracking-wide animate-pulse">
@@ -339,7 +222,7 @@ export default function ScheduleGrid({
                       return (
                         <td
                           key={person}
-                          className="px-2 py-2 text-center text-xs align-middle"
+                          className="px-3 py-2.5 text-center text-sm align-middle"
                           style={{ backgroundColor: '#dbeafe', color: '#1e40af' }}
                           title={`${calEvent.summary}${calEvent.location ? ' @ ' + calEvent.location : ''}`}
                         >
@@ -354,7 +237,7 @@ export default function ScheduleGrid({
                       return (
                         <td
                           key={person}
-                          className={`px-2 py-1.5 text-center text-xs align-middle transition-all ${activity.completed ? 'opacity-40' : ''} ${editMode ? 'cursor-pointer hover:brightness-95' : ''}`}
+                          className={`px-3 py-2.5 text-center text-sm align-middle transition-all ${activity.completed ? 'opacity-40' : ''} ${editMode ? 'cursor-pointer hover:brightness-95' : ''}`}
                           style={{
                             backgroundColor: activity.completed ? '#f5f5f4' : typeColor,
                             color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
@@ -362,10 +245,10 @@ export default function ScheduleGrid({
                           }}
                           onClick={() => editMode && handleCellClick(person, row.start, row.end)}
                         >
-                          <div className="flex items-center gap-1 justify-center">
+                          <div className="flex items-center gap-1.5 justify-center">
                             <button
                               onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
-                              className={`w-4 h-4 rounded flex-shrink-0 flex items-center justify-center transition-all ${
+                              className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-all ${
                                 activity.completed
                                   ? 'bg-green-500 text-white'
                                   : 'bg-white/60 border border-stone-300 hover:border-green-400 hover:bg-green-50'
@@ -373,7 +256,7 @@ export default function ScheduleGrid({
                               title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
                             >
                               {activity.completed && (
-                                <svg viewBox="0 0 12 12" className="w-2.5 h-2.5" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5">
                                   <path d="M2 6l3 3 5-5" />
                                 </svg>
                               )}
@@ -388,7 +271,7 @@ export default function ScheduleGrid({
                     return (
                       <td
                         key={person}
-                        className={`px-2 py-2 text-center align-middle ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
+                        className={`px-3 py-3 text-center align-middle ${editMode ? 'cursor-pointer hover:bg-stone-50' : ''}`}
                         style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33` }}
                         onClick={() => handleCellClick(person, row.start, row.end)}
                       >
@@ -403,16 +286,6 @@ export default function ScheduleGrid({
             })}
           </tbody>
         </table>
-      </div>
-
-      {/* Legend */}
-      <div className="flex flex-wrap gap-3 text-xs px-1">
-        {Object.entries(ACTIVITY_COLORS).map(([type, color]) => (
-          <div key={type} className="flex items-center gap-1.5">
-            <span className="w-3.5 h-3.5 rounded-sm border border-stone-200" style={{ backgroundColor: color }} />
-            <span className="capitalize text-stone-500">{type}</span>
-          </div>
-        ))}
       </div>
 
       {/* Activity Modal */}
