@@ -304,11 +304,11 @@ export default function ScheduleGrid({
           className={`px-4 py-2.5 rounded-md text-sm font-bold transition-colors ${
             moveMode
               ? 'bg-blue-600 text-white ring-2 ring-blue-300'
-              : 'bg-stone-100 text-stone-500'
+              : 'bg-white border-2 border-stone-300 text-stone-700 shadow-sm'
           }`}
           style={{ touchAction: 'manipulation', minHeight: 44 }}
         >
-          {moveMode ? '↕ Moving ON — drag activities' : '↕ Move'}
+          {moveMode ? '✓ Done Moving' : '↕ Move'}
         </button>
         {moveMode && (
           <span className="text-xs text-stone-400">Long-press an activity, then drag to a new slot.</span>
