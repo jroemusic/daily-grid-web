@@ -44,6 +44,7 @@ interface ScheduleGridProps {
   onToggleComplete: (index: number) => void;
   onCalendarEventOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
   editMode: boolean;
+  moveMode: boolean;
   triggerNewActivity?: number;
 }
 
@@ -57,6 +58,7 @@ export default function ScheduleGrid({
   onToggleComplete,
   onCalendarEventOverride,
   editMode,
+  moveMode,
   triggerNewActivity
 }: ScheduleGridProps) {
   const [editState, setEditState] = useState<{
@@ -72,7 +74,6 @@ export default function ScheduleGrid({
     position: { x: number; y: number };
   } | null>(null);
 
-  const [moveMode, setMoveMode] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Respond to external "new activity" trigger
@@ -302,24 +303,6 @@ export default function ScheduleGrid({
 
   return (
     <div ref={containerRef} className="h-full flex flex-col">
-      {/* Move mode toggle */}
-      <div className="flex items-center gap-2 mb-1 px-1">
-        <button
-          onClick={() => setMoveMode(m => !m)}
-          className={`px-4 py-2.5 rounded-md text-sm font-bold transition-colors ${
-            moveMode
-              ? 'bg-blue-600 text-white ring-2 ring-blue-300'
-              : 'bg-white border-2 border-stone-300 text-stone-700 shadow-sm'
-          }`}
-          style={{ touchAction: 'manipulation', minHeight: 44 }}
-        >
-          {moveMode ? '✓ Done Moving' : '↕ Move'}
-        </button>
-        {moveMode && (
-          <span className="text-xs text-stone-400">Long-press an activity, then drag to a new slot.</span>
-        )}
-      </div>
-
       <DragDropContext onDragEnd={handleDragEnd}>
         <div
           className="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-auto flex-1"

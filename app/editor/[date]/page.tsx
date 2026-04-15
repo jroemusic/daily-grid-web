@@ -7,6 +7,7 @@ import { getDayName, getTodayDate } from '@/lib/time';
 import { formatDate, openPrintableView } from '@/lib/pdf';
 import { useAutoSave } from '@/lib/useAutoSave';
 import ScheduleGrid from '@/components/ScheduleGrid';
+import * as Switch from '@radix-ui/react-switch';
 
 export default function EditorPage({ params }: { params: Promise<{ date: string }> }) {
   const resolvedParams = use(params);
@@ -348,6 +349,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     }
   }, [schedule]);
 
+  const [moveMode, setMoveMode] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
 
@@ -423,6 +425,17 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           </div>
           <div className="flex items-center gap-1.5">
             <button
+              onClick={() => setMoveMode(m => !m)}
+              className={`px-3 py-2 rounded-md text-sm font-bold transition-colors ${
+                moveMode
+                  ? 'bg-blue-600 text-white ring-2 ring-blue-300'
+                  : 'bg-stone-200 text-stone-600 hover:bg-stone-300'
+              }`}
+              style={{ touchAction: 'manipulation', minHeight: 44 }}
+            >
+              {moveMode ? '✓ Done' : '↕ Move'}
+            </button>
+            <button
               onClick={handleUndo}
               disabled={!canUndo}
               className={`px-3 py-2 rounded-md text-sm font-bold transition-colors ${
@@ -472,6 +485,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           onToggleComplete={handleToggleComplete}
           onCalendarEventOverride={handleCalendarEventOverride}
           editMode={editMode}
+          moveMode={moveMode}
           triggerNewActivity={triggerNewActivity}
         />
       </main>
@@ -613,9 +627,15 @@ function CalendarStrip({ events, onOverride }: {
                 style={{ scrollSnapAlign: 'start', touchAction: 'manipulation', minHeight: 36 }}
                 onClick={() => setExpandedEvent(isExpanded ? null : event.id)}
               >
-                <button onClick={e => { e.stopPropagation(); onOverride(event.id, { enabled: !isEnabled }); }} className={`w-7 h-4 rounded-full relative flex-shrink-0 transition-colors ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`} style={{ touchAction: 'manipulation', minWidth: 44, minHeight: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <span className={`absolute top-px w-3 h-3 rounded-full bg-white shadow transition-all ${isEnabled ? 'left-3' : 'left-px'}`} />
-                </button>
+                <Switch.Root
+                  checked={isEnabled}
+                  onCheckedChange={() => onOverride(event.id, { enabled: !isEnabled })}
+                  onClick={e => e.stopPropagation()}
+                  className={`relative w-11 h-6 rounded-full transition-colors flex-shrink-0 ${isEnabled ? 'bg-blue-500' : 'bg-stone-300'}`}
+                  style={{ touchAction: 'manipulation' }}
+                >
+                  <Switch.Thumb className="block w-5 h-5 bg-white rounded-full shadow transition-transform translate-x-0.5 data-[state=checked]:translate-x-[22px]" />
+                </Switch.Root>
                 {time && <span className="font-mono text-[10px] font-semibold">{time}</span>}
                 <span className="font-medium">{event.summary}</span>
                 <div className="flex gap-0.5">
