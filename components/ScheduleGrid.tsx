@@ -21,6 +21,7 @@ import {
 } from '@/lib/time';
 import { shiftActivitiesFrom, shiftSingleActivity } from '@/lib/shiftCascade';
 import ShiftMenu from './ShiftMenu';
+import DropModal, { type PendingDrop } from './DropModal';
 
 const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
 const PERSON_COLORS: Record<string, { bg: string; border: string; dot: string }> = {
@@ -73,6 +74,8 @@ export default function ScheduleGrid({
     person: string;
     position: { x: number; y: number };
   } | null>(null);
+
+  const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -186,55 +189,125 @@ export default function ScheduleGrid({
     }
   }
 
-  // Drag end handler — move and swap
+  // Drag end handler — validates and stores pending drop (no mutation)
   function handleDragEnd(result: DropResult) {
     const { source, destination } = result;
     if (!destination) return;
     if (source.droppableId === destination.droppableId) return;
 
-    // Parse: "person-rowStart" e.g. "Jason-08:00" or "Jason-09:30"
     const [srcPerson, srcTime] = source.droppableId.split('-');
     const [destPerson, destTime] = destination.droppableId.split('-');
 
-    const srcCellData = getCellContent(srcPerson, srcTime, minutesToTime(timeToMinutes(srcTime) + 60));
+    // Fix: use actual row end time instead of hard-coded +60
+    const srcRow = uniqueRows.find(r => r.start === srcTime);
+    const srcRowEnd = srcRow ? srcRow.end : minutesToTime(timeToMinutes(srcTime) + 60);
+
+    const srcCellData = getCellContent(srcPerson, srcTime, srcRowEnd);
     if (!srcCellData) return;
 
     const srcActivity = srcCellData.activity;
     const srcDuration = timeToMinutes(srcActivity.end) - timeToMinutes(srcActivity.start);
     const destEndTime = minutesToTime(timeToMinutes(destTime) + srcDuration);
 
-    // Find target activity for swap
-    const destCellData = getCellContent(destPerson, destTime, destEndTime);
+    // Find target activity at destination
+    const destRow = uniqueRows.find(r => r.start === destTime);
+    const destRowEnd = destRow ? destRow.end : minutesToTime(timeToMinutes(destTime) + 60);
+    const destCellData = getCellContent(destPerson, destTime, destRowEnd);
 
-    // Build batch updates for swap (both updates applied atomically)
-    if (destCellData) {
-      const destActivity = destCellData.activity;
-      const destDuration = timeToMinutes(destActivity.end) - timeToMinutes(destActivity.start);
-      const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
-      const destIdx = schedule.activities.findIndex(a => a.id === destActivity.id);
+    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
 
-      onActivitiesUpdate([
-        {
-          index: sourceIdx,
-          updates: { start: destTime, end: destEndTime, people: [destPerson] }
-        },
-        {
-          index: destIdx,
-          updates: { start: srcTime, end: minutesToTime(timeToMinutes(srcTime) + destDuration), people: [srcPerson] }
-        }
-      ]);
-    } else {
-      // Simple move (no swap)
-      const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
-      onActivityUpdate(sourceIdx, {
-        start: destTime,
-        end: destEndTime,
-        people: [destPerson],
-      });
+    // Get destination cell position for modal placement
+    const destCell = document.querySelector(`[data-rfd-droppable-id="${destination.droppableId}"]`);
+    const destRect = destCell?.getBoundingClientRect();
+    const dropX = destRect ? destRect.left + destRect.width / 2 - 130 : 100;
+    const dropY = destRect ? destRect.top : 200;
+
+    setPendingDrop({
+      srcActivity,
+      srcPerson,
+      srcTime,
+      destActivity: destCellData?.activity ?? null,
+      destPerson,
+      destTime,
+      destEndTime,
+      dropPosition: { x: dropX, y: dropY },
+    });
+  }
+
+  function executeSwap() {
+    if (!pendingDrop) return;
+    const { srcActivity, srcPerson, srcTime, destActivity, destPerson, destTime, destEndTime } = pendingDrop;
+    if (!destActivity) {
+      executeMove();
+      return;
     }
 
-    // Haptic on drop
-    if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(30);
+    const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
+    const destIdx = schedule.activities.findIndex(a => a.id === destActivity.id);
+    const destDuration = timeToMinutes(destActivity.end) - timeToMinutes(destActivity.start);
+
+    // Source activity: move to dest time, swap people
+    const newSrcPeople = srcActivity.people.filter(p => p !== srcPerson);
+    if (!newSrcPeople.includes(destPerson)) newSrcPeople.push(destPerson);
+
+    // Destination activity: move to source time, swap people
+    const newDestPeople = destActivity.people.filter(p => p !== destPerson);
+    if (!newDestPeople.includes(srcPerson)) newDestPeople.push(srcPerson);
+
+    onActivitiesUpdate([
+      {
+        index: sourceIdx,
+        updates: {
+          start: destTime,
+          end: destEndTime,
+          people: newSrcPeople,
+        },
+      },
+      {
+        index: destIdx,
+        updates: {
+          start: srcTime,
+          end: minutesToTime(timeToMinutes(srcTime) + destDuration),
+          people: newDestPeople,
+        },
+      },
+    ]);
+    setPendingDrop(null);
+  }
+
+  function executeCopy() {
+    if (!pendingDrop) return;
+    const { srcActivity, destPerson, destTime, destEndTime } = pendingDrop;
+
+    onActivityAdd(destTime, destEndTime, destPerson);
+    // Update the placeholder with real data on next tick
+    setTimeout(() => {
+      onActivityUpdate(schedule.activities.length, {
+        title: srcActivity.title,
+        type: srcActivity.type,
+        color: srcActivity.color,
+        notes: srcActivity.notes,
+      });
+    }, 50);
+    setPendingDrop(null);
+  }
+
+  function executeMove() {
+    if (!pendingDrop) return;
+    const { srcActivity, srcPerson, destPerson, destTime, destEndTime } = pendingDrop;
+
+    const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
+
+    // Remove source person, add dest person
+    const newPeople = srcActivity.people.filter(p => p !== srcPerson);
+    if (!newPeople.includes(destPerson)) newPeople.push(destPerson);
+
+    onActivityUpdate(sourceIdx, {
+      start: destTime,
+      end: destEndTime,
+      people: newPeople,
+    });
+    setPendingDrop(null);
   }
 
   function handleShift(shiftMinutes: number, cascade: boolean) {
@@ -555,6 +628,18 @@ export default function ScheduleGrid({
           position={shiftMenu.position}
           onShift={handleShift}
           onClose={() => setShiftMenu(null)}
+        />
+      )}
+
+      {/* Drop choice modal */}
+      {pendingDrop && (
+        <DropModal
+          pending={pendingDrop}
+          allActivities={schedule.activities}
+          onSwap={executeSwap}
+          onCopy={executeCopy}
+          onMove={executeMove}
+          onClose={() => setPendingDrop(null)}
         />
       )}
     </div>
