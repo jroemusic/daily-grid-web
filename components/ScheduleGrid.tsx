@@ -46,7 +46,6 @@ interface ScheduleGridProps {
   onToggleComplete: (index: number) => void;
   onCalendarEventOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
   editMode: boolean;
-  moveMode: boolean;
   triggerNewActivity?: number;
 }
 
@@ -61,7 +60,6 @@ export default function ScheduleGrid({
   onToggleComplete,
   onCalendarEventOverride,
   editMode,
-  moveMode,
   triggerNewActivity
 }: ScheduleGridProps) {
   const [editState, setEditState] = useState<{
@@ -182,7 +180,7 @@ export default function ScheduleGrid({
   }
 
   function handleCellClick(person: string, rowStart: string, rowEnd: string) {
-    if (!editMode || moveMode) return;
+    if (!editMode) return;
     const existing = getCellContent(person, rowStart, rowEnd);
     if (existing) {
       setEditState({ active: true, activityIndex: existing.index, isNew: false, defaults: null });
@@ -344,7 +342,7 @@ export default function ScheduleGrid({
     activity: Activity,
     person: string,
   ) {
-    if (moveMode || !editMode) return;
+    if (!editMode) return;
     const touch = e.touches[0];
     longPressStartRef.current = { x: touch.clientX, y: touch.clientY };
 
@@ -464,7 +462,7 @@ export default function ScheduleGrid({
                                   className={`px-3 py-3 text-center text-sm ${
                                     activity.completed ? 'opacity-40' : ''
                                   } ${snapshot.isDraggingOver ? 'ring-2 ring-inset ring-blue-300 bg-blue-50' : ''} ${
-                                    editMode && !moveMode ? 'cursor-pointer' : ''
+                                    editMode ? 'cursor-pointer' : ''
                                   }`}
                                   style={{
                                     backgroundColor: snapshot.isDraggingOver
@@ -479,14 +477,14 @@ export default function ScheduleGrid({
                                     minHeight: 44,
                                   }}
                                   onClick={() => {
-                                    if (!moveMode && editMode) handleCellClick(person, row.start, row.end);
+                                    if (editMode) handleCellClick(person, row.start, row.end);
                                   }}
                                   onContextMenu={e => e.preventDefault()}
-                                  onTouchStart={!moveMode && editMode ? (e => handleActivityTouchStart(e, activity, person)) : undefined}
-                                  onTouchMove={!moveMode && editMode ? handleActivityTouchMove : undefined}
-                                  onTouchEnd={!moveMode && editMode ? handleActivityTouchEnd : undefined}
+                                  onTouchStart={editMode ? (e => handleActivityTouchStart(e, activity, person)) : undefined}
+                                  onTouchMove={editMode ? handleActivityTouchMove : undefined}
+                                  onTouchEnd={editMode ? handleActivityTouchEnd : undefined}
                                 >
-                                  <Draggable draggableId={draggableId} index={0} isDragDisabled={!moveMode}>
+                                  <Draggable draggableId={draggableId} index={0}>
                                     {(dragProvided, dragSnapshot) => {
                                       const dragStyle = dragProvided.draggableProps.style as React.CSSProperties | undefined;
                                       const isDragging = dragSnapshot.isDragging;
@@ -495,7 +493,7 @@ export default function ScheduleGrid({
                                         <div
                                           ref={dragProvided.innerRef}
                                           {...dragProvided.draggableProps}
-                                          {...(moveMode ? dragProvided.dragHandleProps : {})}
+                                          {...(dragProvided.dragHandleProps)}
                                           style={{
                                             ...dragStyle,
                                             ...(isFixed ? {
@@ -511,10 +509,10 @@ export default function ScheduleGrid({
                                             justifyContent: 'center',
                                             gap: 6,
                                             opacity: isDragging && !dragSnapshot.draggingOver ? 0.5 : undefined,
-                                            cursor: moveMode ? 'grab' : undefined,
+                                            cursor: 'grab',
                                           }}
                                         >
-                                          {!moveMode && (
+                                          {!isDragging && (
                                             <button
                                               onClick={e => { e.stopPropagation(); onToggleComplete(index); }}
                                               className={`w-6 h-6 rounded flex-shrink-0 flex items-center justify-center transition-colors ${
@@ -535,7 +533,7 @@ export default function ScheduleGrid({
                                           <span className={`leading-tight ${activity.completed ? 'line-through' : 'font-medium'}`}>
                                             {activity.title}
                                           </span>
-                                          {!moveMode && (
+                                          {!isDragging && (
                                             <button
                                               onClick={e => {
                                                 e.stopPropagation();
@@ -576,7 +574,7 @@ export default function ScheduleGrid({
                                 ref={provided.innerRef}
                                 {...provided.droppableProps}
                                 className={`px-3 py-3 text-center ${
-                                  editMode && !moveMode ? 'cursor-pointer' : ''
+                                  editMode ? 'cursor-pointer' : ''
                                 } ${snapshot.isDraggingOver ? 'ring-2 ring-inset ring-blue-300' : ''}`}
                                 style={{
                                   backgroundColor: snapshot.isDraggingOver ? '#eff6ff' : undefined,
@@ -584,11 +582,11 @@ export default function ScheduleGrid({
                                   minHeight: 44,
                                 }}
                                 onClick={() => {
-                                  if (!moveMode && editMode) handleCellClick(person, row.start, row.end);
+                                  if (editMode) handleCellClick(person, row.start, row.end);
                                 }}
                                 onContextMenu={e => e.preventDefault()}
                               >
-                                {editMode && !moveMode && !snapshot.isDraggingOver && (
+                                {editMode && !snapshot.isDraggingOver && (
                                   <span className="text-stone-300 text-lg leading-none touch-show" style={{ opacity: 0.5 }}>+</span>
                                 )}
                                 {snapshot.isDraggingOver && (

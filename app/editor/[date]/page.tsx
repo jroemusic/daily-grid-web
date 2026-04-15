@@ -360,7 +360,6 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     }
   }, [schedule]);
 
-  const [moveMode, setMoveMode] = useState(false);
   const [showSaveTemplate, setShowSaveTemplate] = useState(false);
   const [templateName, setTemplateName] = useState('');
 
@@ -436,17 +435,6 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           </div>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setMoveMode(m => !m)}
-              className={`px-3 py-2 rounded-md text-sm font-bold transition-colors ${
-                moveMode
-                  ? 'bg-blue-600 text-white ring-2 ring-blue-300'
-                  : 'bg-stone-200 text-stone-600 hover:bg-stone-300'
-              }`}
-              style={{ touchAction: 'manipulation', minHeight: 44 }}
-            >
-              {moveMode ? '✓ Done' : '↕ Move'}
-            </button>
-            <button
               onClick={handleUndo}
               disabled={!canUndo}
               className={`px-3 py-2 rounded-md text-sm font-bold transition-colors ${
@@ -497,7 +485,6 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           onToggleComplete={handleToggleComplete}
           onCalendarEventOverride={handleCalendarEventOverride}
           editMode={editMode}
-          moveMode={moveMode}
           triggerNewActivity={triggerNewActivity}
         />
       </main>
