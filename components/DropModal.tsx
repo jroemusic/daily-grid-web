@@ -3,7 +3,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Activity } from '@/lib/types';
-import { timesOverlap } from '@/lib/time';
+import { timesOverlap, timeToMinutes, minutesToTime } from '@/lib/time';
 
 export interface PendingDrop {
   srcActivity: Activity;
@@ -71,17 +71,8 @@ export default function DropModal({
   }
 
   // Check for overlaps at destination (for Copy and Move)
-  const srcDuration = (() => {
-    const [sh, sm] = pending.srcActivity.start.split(':').map(Number);
-    const [eh, em] = pending.srcActivity.end.split(':').map(Number);
-    return (eh * 60 + em) - (sh * 60 + sm);
-  })();
-  const destStartMin = (() => {
-    const [h, m] = pending.destTime.split(':').map(Number);
-    return h * 60 + m;
-  })();
-  const destEndMin = destStartMin + srcDuration;
-  const destEndFormatted = `${String(Math.floor(destEndMin / 60) % 24).padStart(2, '0')}:${String(destEndMin % 60).padStart(2, '0')}`;
+  const srcDuration = timeToMinutes(pending.srcActivity.end) - timeToMinutes(pending.srcActivity.start);
+  const destEndFormatted = minutesToTime(timeToMinutes(pending.destTime) + srcDuration);
 
   // Find overlapping activity for the destination person (excluding source and destination activities)
   const overlapActivity = allActivities.find(a => {
