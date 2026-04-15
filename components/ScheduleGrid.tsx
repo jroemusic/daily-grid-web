@@ -266,8 +266,8 @@ export default function ScheduleGrid({
       {
         index: destIdx,
         updates: {
-          start: srcTime,
-          end: minutesToTime(timeToMinutes(srcTime) + destDuration),
+          start: srcActivity.start,
+          end: srcActivity.end,
           people: newDestPeople,
         },
       },
