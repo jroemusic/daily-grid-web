@@ -40,47 +40,31 @@ export default function DropModal({
     requestAnimationFrame(() => setVisible(true));
   }, []);
 
-  // Dismiss on outside click/tap — gated behind a new pointer interaction
-  // so residual drag-release events don't close the modal
+  // Dismiss on outside tap — timestamp gate ignores residual drag-release events
   useEffect(() => {
+    const mountTime = performance.now();
     let dismissed = false;
-    let sawNewPointerDown = false;
 
-    function onPointerDown() {
-      sawNewPointerDown = true;
-    }
-
-    function handleClick(e: MouseEvent) {
-      if (dismissed || !sawNewPointerDown) return;
+    function onPointerDown(e: PointerEvent) {
+      if (dismissed) return;
+      // Ignore events within 300ms of mount (residual from drag release)
+      if (performance.now() - mountTime < 300) return;
       if (ref.current && !ref.current.contains(e.target as Node)) {
         handleClose();
       }
     }
-    function handleTouch(e: TouchEvent) {
-      if (dismissed || !sawNewPointerDown) return;
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        handleClose();
-      }
-    }
+
     function handleKey(e: KeyboardEvent) {
       if (dismissed) return;
       if (e.key === 'Escape') handleClose();
     }
 
-    // Wait for drag-release events to clear, then start listening for a NEW touch/click
-    const attachTimer = setTimeout(() => {
-      document.addEventListener('pointerdown', onPointerDown);
-      document.addEventListener('mousedown', handleClick);
-      document.addEventListener('touchend', handleTouch as any);
-      document.addEventListener('keydown', handleKey);
-    }, 200);
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', handleKey);
 
     return () => {
       dismissed = true;
-      clearTimeout(attachTimer);
       document.removeEventListener('pointerdown', onPointerDown);
-      document.removeEventListener('mousedown', handleClick);
-      document.removeEventListener('touchend', handleTouch as any);
       document.removeEventListener('keydown', handleKey);
     };
   }, [onClose]);

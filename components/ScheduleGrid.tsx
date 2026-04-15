@@ -306,11 +306,12 @@ export default function ScheduleGrid({
     if (!scrollEl || !tableEl) return;
 
     const HOLD_MS = 150;
-    const MOVE_PX = 25;
+    const MOVE_PX = 10;
     const GHOST_OFFSET_Y = 70;
 
     let timer: ReturnType<typeof setTimeout> | null = null;
     let dragging = false;
+    let activePointerId = -1;
     let sourceCell: HTMLElement | null = null;
     let sourceKey = '';
     let sourcePerson = '';
@@ -346,6 +347,7 @@ export default function ScheduleGrid({
         hoveredCell = null;
       }
       dragging = false;
+      activePointerId = -1;
       sourceCell = null;
       sourceActivity = null;
       sourceIndex = -1;
@@ -450,6 +452,7 @@ export default function ScheduleGrid({
 
     function onPointerDown(e: PointerEvent) {
       if (!editModeRef.current) return;
+      if (activePointerId !== -1) return; // Already tracking a pointer
       const cell = closestCell(e.target as Element);
       if (!cell?.dataset.cellkey) return;
 
@@ -470,25 +473,22 @@ export default function ScheduleGrid({
       sourceSlot = slot;
       sourceActivity = cellData.activity;
       sourceIndex = cellData.index;
+      activePointerId = e.pointerId;
 
-      // Immediately block scrolling during hold-to-drag detection so the
-      // browser doesn't start a scroll gesture that fights the drag.
-      // If the user moves >MOVE_PX we restore scrolling (they're scrolling).
-      if (scrollEl) scrollEl.style.touchAction = 'none';
-
-      // Capture pointerId for use inside setTimeout
+      // Do NOT set touchAction here — let the browser scroll freely during
+      // the hold-to-drag detection window. Only block scrolling once the
+      // hold timer fires and we commit to a drag.
       const pointerId = e.pointerId;
       timer = setTimeout(() => {
         if (!sourceCell) return;
         timer = null;
         dragging = true;
         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
+        // NOW block scrolling — we've committed to a drag
+        if (scrollEl) scrollEl.style.touchAction = 'none';
         sourceCell.style.opacity = '0.35';
         sourceCell.style.outline = '2px dashed #999';
         sourceCell.style.outlineOffset = '-2px';
-        // Capture pointer inside setTimeout (after hold fires), matching demo3 pattern.
-        // Doing it before the timer (as the old code did) can cause issues because
-        // pointer capture changes event routing before we've committed to dragging.
         sourceCell.setPointerCapture(pointerId);
         createGhost(sourceCell);
         moveGhost(startX, startY);
@@ -496,6 +496,7 @@ export default function ScheduleGrid({
     }
 
     function onPointerMove(e: PointerEvent) {
+      if (e.pointerId !== activePointerId) return;
       if (timer && !dragging) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
@@ -505,8 +506,7 @@ export default function ScheduleGrid({
           sourceCell = null;
           sourceActivity = null;
           sourceIndex = -1;
-          // User is scrolling, not dragging — restore touch scrolling
-          if (scrollEl) scrollEl.style.touchAction = 'pan-y';
+          activePointerId = -1;
         }
         return;
       }
@@ -517,6 +517,10 @@ export default function ScheduleGrid({
     }
 
     function onPointerUp(e: PointerEvent) {
+      if (e.pointerId !== activePointerId && !dragging) {
+        cleanup();
+        return;
+      }
       if (!dragging) {
         cleanup();
         return;
