@@ -615,7 +615,7 @@ export default function ScheduleGrid({
                           key={person}
                           data-cellkey={cellKey}
                           className="px-0 py-0 align-middle"
-                          style={{ borderLeft: `3px solid ${personBorder}`, touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+                          style={{ borderLeft: `3px solid ${personBorder}`, userSelect: 'none', WebkitUserSelect: 'none' }}
                           onClick={() => {
                             if (justDraggedRef.current) return;
                             if (editMode) handleCellClick(person, row.start, row.end);
@@ -633,7 +633,6 @@ export default function ScheduleGrid({
                               color: activity.completed ? '#a8a29e' : getTypeTextColor(activity.type),
                               userSelect: 'none',
                               WebkitUserSelect: 'none',
-                              touchAction: 'none',
                               minHeight: 44,
                               display: 'flex',
                               alignItems: 'center',
@@ -686,7 +685,7 @@ export default function ScheduleGrid({
                         key={person}
                         data-cellkey={cellKey}
                         className="px-0 py-0 align-middle"
-                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33`, touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none' }}
+                        style={{ borderLeft: `3px solid ${PERSON_COLORS[person]?.border || '#e7e5e4'}33`, userSelect: 'none', WebkitUserSelect: 'none' }}
                         onClick={() => {
                           if (justDraggedRef.current) return;
                           if (editMode) handleCellClick(person, row.start, row.end);
@@ -698,7 +697,6 @@ export default function ScheduleGrid({
                             editMode ? 'cursor-pointer' : ''
                           }`}
                           style={{
-                            touchAction: 'none',
                             minHeight: 44,
                             pointerEvents: 'none',
                           }}
