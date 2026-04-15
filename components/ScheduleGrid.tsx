@@ -351,7 +351,6 @@ export default function ScheduleGrid({
       sourceCell = null;
       sourceActivity = null;
       sourceIndex = -1;
-      if (scrollEl) scrollEl.style.touchAction = 'pan-y';
     }
 
     function createGhost(cell: HTMLElement) {
@@ -450,6 +449,14 @@ export default function ScheduleGrid({
       });
     }
 
+    // Block browser scrolling during active drag via touchmove preventDefault.
+    // This is the ONLY reliable way to stop an in-progress touch scroll —
+    // CSS touch-action is read once at pointerdown and cannot be changed mid-gesture.
+    function onTouchMove(e: TouchEvent) {
+      if (!dragging) return;
+      e.preventDefault();
+    }
+
     function onPointerDown(e: PointerEvent) {
       if (!editModeRef.current) return;
       if (activePointerId !== -1) return; // Already tracking a pointer
@@ -475,17 +482,14 @@ export default function ScheduleGrid({
       sourceIndex = cellData.index;
       activePointerId = e.pointerId;
 
-      // Do NOT set touchAction here — let the browser scroll freely during
-      // the hold-to-drag detection window. Only block scrolling once the
-      // hold timer fires and we commit to a drag.
+      // During the hold-to-drag window, the browser scrolls freely (touchAction: pan-y).
+      // If the hold timer fires, we commit to drag and block scrolling via touchmove preventDefault.
       const pointerId = e.pointerId;
       timer = setTimeout(() => {
         if (!sourceCell) return;
         timer = null;
         dragging = true;
         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
-        // NOW block scrolling — we've committed to a drag
-        if (scrollEl) scrollEl.style.touchAction = 'none';
         sourceCell.style.opacity = '0.35';
         sourceCell.style.outline = '2px dashed #999';
         sourceCell.style.outlineOffset = '-2px';
@@ -537,6 +541,8 @@ export default function ScheduleGrid({
     tableEl.addEventListener('pointermove', onPointerMove);
     tableEl.addEventListener('pointerup', onPointerUp);
     tableEl.addEventListener('pointercancel', onPointerCancel);
+    // touchmove with passive:false lets us call preventDefault to block scrolling during drag
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
 
     return () => {
       cleanup();
@@ -544,6 +550,7 @@ export default function ScheduleGrid({
       tableEl.removeEventListener('pointermove', onPointerMove);
       tableEl.removeEventListener('pointerup', onPointerUp);
       tableEl.removeEventListener('pointercancel', onPointerCancel);
+      document.removeEventListener('touchmove', onTouchMove);
     };
   }, []);
 
