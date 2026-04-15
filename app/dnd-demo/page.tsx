@@ -14,6 +14,21 @@ export default function DndDemoIndex() {
 
         <div className="space-y-4">
           <Link
+            href="/dnd-demo/demo3-grid-with-modal"
+            className="block bg-white rounded-xl border-2 border-orange-300 p-5 hover:border-orange-500 hover:shadow-md transition-colors"
+            style={{ minHeight: 100 }}
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <span className="bg-orange-100 text-orange-700 px-2.5 py-1 rounded-md text-xs font-bold">NEW</span>
+              <h2 className="text-lg font-bold text-stone-800">Demo 3: Pointer Events + Drop Modal</h2>
+            </div>
+            <p className="text-stone-500 text-sm">
+              Custom pointer events with Swap/Copy/Move modal after drop. No library — full control.
+              This is the approach we want to use in the real grid.
+            </p>
+          </Link>
+
+          <Link
             href="/dnd-demo/demo1-pointer-events"
             className="block bg-white rounded-xl border-2 border-stone-200 p-5 hover:border-blue-400 hover:shadow-md transition-colors"
             style={{ minHeight: 100 }}
