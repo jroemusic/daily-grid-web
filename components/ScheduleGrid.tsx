@@ -471,6 +471,11 @@ export default function ScheduleGrid({
       sourceActivity = cellData.activity;
       sourceIndex = cellData.index;
 
+      // Immediately block scrolling during hold-to-drag detection so the
+      // browser doesn't start a scroll gesture that fights the drag.
+      // If the user moves >MOVE_PX we restore scrolling (they're scrolling).
+      if (scrollEl) scrollEl.style.touchAction = 'none';
+
       // Capture pointerId for use inside setTimeout
       const pointerId = e.pointerId;
       timer = setTimeout(() => {
@@ -478,7 +483,6 @@ export default function ScheduleGrid({
         timer = null;
         dragging = true;
         if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(50);
-        if (scrollEl) scrollEl.style.touchAction = 'none';
         sourceCell.style.opacity = '0.35';
         sourceCell.style.outline = '2px dashed #999';
         sourceCell.style.outlineOffset = '-2px';
@@ -501,6 +505,8 @@ export default function ScheduleGrid({
           sourceCell = null;
           sourceActivity = null;
           sourceIndex = -1;
+          // User is scrolling, not dragging — restore touch scrolling
+          if (scrollEl) scrollEl.style.touchAction = 'pan-y';
         }
         return;
       }
