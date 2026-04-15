@@ -229,6 +229,18 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     setSchedule({ ...schedule, activities: newActivities });
   }, [schedule]);
 
+  const handleActivitiesUpdate = useCallback((updates: { index: number; updates: Partial<Activity> }[]) => {
+    if (!schedule) return;
+    undoStack.current.push(schedule.activities.map(a => ({ ...a })));
+    if (undoStack.current.length > 20) undoStack.current.shift();
+    setCanUndo(true);
+    const newActivities = [...schedule.activities];
+    for (const { index, updates: u } of updates) {
+      newActivities[index] = { ...newActivities[index], ...u };
+    }
+    setSchedule({ ...schedule, activities: newActivities });
+  }, [schedule]);
+
   const handleActivityAdd = useCallback((start: string, end: string, person: string) => {
     if (!schedule) return;
     undoStack.current.push(schedule.activities.map(a => ({ ...a })));
@@ -454,6 +466,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           schedule={schedule}
           currentTime={currentTimeForGrid}
           onActivityUpdate={handleActivityUpdate}
+          onActivitiesUpdate={handleActivitiesUpdate}
           onActivityAdd={handleActivityAdd}
           onActivityRemove={handleActivityRemove}
           onToggleComplete={handleToggleComplete}

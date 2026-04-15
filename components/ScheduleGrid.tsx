@@ -38,6 +38,7 @@ interface ScheduleGridProps {
   schedule: Schedule;
   currentTime: string;
   onActivityUpdate: (index: number, updates: Partial<Activity>) => void;
+  onActivitiesUpdate: (updates: { index: number; updates: Partial<Activity> }[]) => void;
   onActivityAdd: (start: string, end: string, person: string) => void;
   onActivityRemove: (index: number) => void;
   onToggleComplete: (index: number) => void;
@@ -50,6 +51,7 @@ export default function ScheduleGrid({
   schedule,
   currentTime,
   onActivityUpdate,
+  onActivitiesUpdate,
   onActivityAdd,
   onActivityRemove,
   onToggleComplete,
@@ -203,28 +205,31 @@ export default function ScheduleGrid({
     // Find target activity for swap
     const destCellData = getCellContent(destPerson, destTime, destEndTime);
 
-    // Move source to target
-    const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
-    if (sourceIdx >= 0) {
+    // Build batch updates for swap (both updates applied atomically)
+    if (destCellData) {
+      const destActivity = destCellData.activity;
+      const destDuration = timeToMinutes(destActivity.end) - timeToMinutes(destActivity.start);
+      const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
+      const destIdx = schedule.activities.findIndex(a => a.id === destActivity.id);
+
+      onActivitiesUpdate([
+        {
+          index: sourceIdx,
+          updates: { start: destTime, end: destEndTime, people: [destPerson] }
+        },
+        {
+          index: destIdx,
+          updates: { start: srcTime, end: minutesToTime(timeToMinutes(srcTime) + destDuration), people: [srcPerson] }
+        }
+      ]);
+    } else {
+      // Simple move (no swap)
+      const sourceIdx = schedule.activities.findIndex(a => a.id === srcActivity.id);
       onActivityUpdate(sourceIdx, {
         start: destTime,
         end: destEndTime,
         people: [destPerson],
       });
-    }
-
-    // Swap: move destination activity to source position
-    if (destCellData) {
-      const destActivity = destCellData.activity;
-      const destDuration = timeToMinutes(destActivity.end) - timeToMinutes(destActivity.start);
-      const destIdx = schedule.activities.findIndex(a => a.id === destActivity.id);
-      if (destIdx >= 0) {
-        onActivityUpdate(destIdx, {
-          start: srcTime,
-          end: minutesToTime(timeToMinutes(srcTime) + destDuration),
-          people: [srcPerson],
-        });
-      }
     }
 
     // Haptic on drop
