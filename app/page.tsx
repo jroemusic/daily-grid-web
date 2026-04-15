@@ -108,6 +108,33 @@ export default function HomePage() {
           )}
         </section>
 
+        {/* DnD Demos */}
+        <section className="mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-4">Drag & Drop Demos</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Link
+              href="/dnd-demo/demo1-pointer-events"
+              className="block bg-blue-50 border-2 border-blue-200 rounded-lg p-5 hover:bg-blue-100 transition"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-blue-200 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">NO LIBRARY</span>
+              </div>
+              <h3 className="font-semibold text-gray-900">Demo 1: Pointer Events</h3>
+              <p className="text-sm text-gray-600 mt-1">Custom pointer events, setPointerCapture, ghost element. Zero dependencies.</p>
+            </Link>
+            <Link
+              href="/dnd-demo/demo2-hello-pangea"
+              className="block bg-green-50 border-2 border-green-200 rounded-lg p-5 hover:bg-green-100 transition"
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <span className="bg-green-200 text-green-800 px-2 py-0.5 rounded text-xs font-bold">LIBRARY</span>
+              </div>
+              <h3 className="font-semibold text-gray-900">Demo 2: @hello-pangea/dnd</h3>
+              <p className="text-sm text-gray-600 mt-1">React 19 compatible library. Built-in touch sensor, Droppable cells.</p>
+            </Link>
+          </div>
+        </section>
+
         {/* Templates */}
         <section>
           <div className="flex justify-between items-center mb-4">
