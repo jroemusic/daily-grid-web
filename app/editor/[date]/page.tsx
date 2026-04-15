@@ -273,6 +273,17 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
     });
   }, [schedule]);
 
+  const handleActivityCreate = useCallback((activity: Activity) => {
+    if (!schedule) return;
+    undoStack.current.push(schedule.activities.map(a => ({ ...a })));
+    if (undoStack.current.length > 20) undoStack.current.shift();
+    setCanUndo(true);
+    setSchedule({
+      ...schedule,
+      activities: [...schedule.activities, activity]
+    });
+  }, [schedule]);
+
   const handleCalendarEventOverride = useCallback(async (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => {
     if (!schedule || !schedule.calendarEvents) return;
     const updatedEvents = schedule.calendarEvents.map(ev => {
@@ -481,6 +492,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
           onActivityUpdate={handleActivityUpdate}
           onActivitiesUpdate={handleActivitiesUpdate}
           onActivityAdd={handleActivityAdd}
+          onActivityCreate={handleActivityCreate}
           onActivityRemove={handleActivityRemove}
           onToggleComplete={handleToggleComplete}
           onCalendarEventOverride={handleCalendarEventOverride}

@@ -41,6 +41,7 @@ interface ScheduleGridProps {
   onActivityUpdate: (index: number, updates: Partial<Activity>) => void;
   onActivitiesUpdate: (updates: { index: number; updates: Partial<Activity> }[]) => void;
   onActivityAdd: (start: string, end: string, person: string) => void;
+  onActivityCreate: (activity: Activity) => void;
   onActivityRemove: (index: number) => void;
   onToggleComplete: (index: number) => void;
   onCalendarEventOverride: (eventId: string, overrides: { enabled?: boolean; overridePeople?: string[] }) => void;
@@ -55,6 +56,7 @@ export default function ScheduleGrid({
   onActivityUpdate,
   onActivitiesUpdate,
   onActivityAdd,
+  onActivityCreate,
   onActivityRemove,
   onToggleComplete,
   onCalendarEventOverride,
@@ -279,16 +281,16 @@ export default function ScheduleGrid({
     if (!pendingDrop) return;
     const { srcActivity, destPerson, destTime, destEndTime } = pendingDrop;
 
-    onActivityAdd(destTime, destEndTime, destPerson);
-    // Update the placeholder with real data on next tick
-    setTimeout(() => {
-      onActivityUpdate(schedule.activities.length, {
-        title: srcActivity.title,
-        type: srcActivity.type,
-        color: srcActivity.color,
-        notes: srcActivity.notes,
-      });
-    }, 50);
+    onActivityCreate({
+      id: `act-${Date.now()}`,
+      title: srcActivity.title,
+      start: destTime,
+      end: destEndTime,
+      people: [destPerson],
+      type: srcActivity.type,
+      color: srcActivity.color,
+      notes: srcActivity.notes,
+    });
     setPendingDrop(null);
   }
 
