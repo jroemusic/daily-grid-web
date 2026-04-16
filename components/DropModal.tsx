@@ -4,6 +4,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Activity } from '@/lib/types';
 import { timesOverlap, timeToMinutes, minutesToTime } from '@/lib/time';
+import { useIsMobile } from '@/lib/hooks';
+import BottomSheet from './BottomSheet';
 
 export interface PendingDrop {
   srcActivity: Activity;
@@ -35,6 +37,7 @@ export default function DropModal({
 }: DropModalProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     requestAnimationFrame(() => setVisible(true));
@@ -99,62 +102,81 @@ export default function DropModal({
     transition: 'opacity 150ms ease, transform 150ms ease',
   };
 
+  const header = (
+    <div className="px-4 py-2.5 bg-stone-800 text-white">
+      <div className="font-bold text-xs">Drop &quot;{pending.srcActivity.title}&quot;?</div>
+      <div className="text-stone-400 text-[10px] mt-0.5">
+        {pending.srcPerson} {pending.srcTime} → {pending.destPerson} {pending.destTime}
+      </div>
+    </div>
+  );
+
+  const buttons = (
+    <div className="p-3 flex flex-col gap-2">
+      <button
+        onClick={() => { if (navigator.vibrate) navigator.vibrate(20); onSwap(); handleClose(); }}
+        className="w-full px-3 py-3 rounded-lg text-sm font-bold border-2 border-blue-400 bg-blue-50 text-blue-800 hover:bg-blue-100 transition-colors"
+        style={{ touchAction: 'manipulation', minHeight: 44 }}
+      >
+        ↔ Swap
+      </button>
+      {hasDestActivity && (
+        <div className="text-[10px] text-stone-400 -mt-1 ml-1">
+          Trades with &quot;{pending.destActivity!.title}&quot;
+        </div>
+      )}
+      {hasOverlap && (
+        <div className="text-[10px] text-amber-600 font-semibold -mt-1 ml-1">
+          ⚠ Overlaps &quot;{overlapActivity!.title}&quot;
+        </div>
+      )}
+      <button
+        onClick={() => { if (navigator.vibrate) navigator.vibrate(20); onCopy(); handleClose(); }}
+        className="w-full px-3 py-3 rounded-lg text-sm font-bold border-2 border-green-400 bg-green-50 text-green-800 hover:bg-green-100 transition-colors"
+        style={{ touchAction: 'manipulation', minHeight: 44 }}
+      >
+        ⊕ Copy
+      </button>
+      <div className="text-[10px] text-stone-400 -mt-1 ml-1">
+        Duplicate to {pending.destPerson} {pending.destTime}
+      </div>
+      <button
+        onClick={() => { if (navigator.vibrate) navigator.vibrate(20); onMove(); handleClose(); }}
+        className="w-full px-3 py-3 rounded-lg text-sm font-bold border-2 border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100 transition-colors"
+        style={{ touchAction: 'manipulation', minHeight: 44 }}
+      >
+        → Move
+      </button>
+      <div className="text-[10px] text-stone-400 -mt-1 ml-1">
+        {pending.srcPerson} {pending.srcTime} empties
+      </div>
+      <button
+        onClick={handleClose}
+        className="w-full bg-stone-50 text-stone-400 px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100 transition-colors mt-1"
+        style={{ touchAction: 'manipulation', minHeight: 44 }}
+      >
+        Cancel
+      </button>
+    </div>
+  );
+
+  if (isMobile) {
+    return (
+      <BottomSheet onClose={handleClose}>
+        <div className="p-4">
+          {header}
+          {buttons}
+        </div>
+      </BottomSheet>
+    );
+  }
+
   return (
     <div ref={ref} style={menuStyle} className="bg-white rounded-xl shadow-xl border border-stone-200 w-64 overflow-hidden"
       onContextMenu={e => e.preventDefault()}
     >
-      <div className="px-4 py-2.5 bg-stone-800 text-white">
-        <div className="font-bold text-xs">Drop &quot;{pending.srcActivity.title}&quot;?</div>
-        <div className="text-stone-400 text-[10px] mt-0.5">
-          {pending.srcPerson} {pending.srcTime} → {pending.destPerson} {pending.destTime}
-        </div>
-      </div>
-      <div className="p-3 flex flex-col gap-2">
-        <button
-          onClick={() => { if (navigator.vibrate) navigator.vibrate(20); onSwap(); handleClose(); }}
-          className="w-full px-3 py-3 rounded-lg text-sm font-bold border-2 border-blue-400 bg-blue-50 text-blue-800 hover:bg-blue-100 transition-colors"
-          style={{ touchAction: 'manipulation', minHeight: 44 }}
-        >
-          ↔ Swap
-        </button>
-        {hasDestActivity && (
-          <div className="text-[10px] text-stone-400 -mt-1 ml-1">
-            Trades with &quot;{pending.destActivity!.title}&quot;
-          </div>
-        )}
-        {hasOverlap && (
-          <div className="text-[10px] text-amber-600 font-semibold -mt-1 ml-1">
-            ⚠ Overlaps &quot;{overlapActivity!.title}&quot;
-          </div>
-        )}
-        <button
-          onClick={() => { if (navigator.vibrate) navigator.vibrate(20); onCopy(); handleClose(); }}
-          className="w-full px-3 py-3 rounded-lg text-sm font-bold border-2 border-green-400 bg-green-50 text-green-800 hover:bg-green-100 transition-colors"
-          style={{ touchAction: 'manipulation', minHeight: 44 }}
-        >
-          ⊕ Copy
-        </button>
-        <div className="text-[10px] text-stone-400 -mt-1 ml-1">
-          Duplicate to {pending.destPerson} {pending.destTime}
-        </div>
-        <button
-          onClick={() => { if (navigator.vibrate) navigator.vibrate(20); onMove(); handleClose(); }}
-          className="w-full px-3 py-3 rounded-lg text-sm font-bold border-2 border-orange-400 bg-orange-50 text-orange-800 hover:bg-orange-100 transition-colors"
-          style={{ touchAction: 'manipulation', minHeight: 44 }}
-        >
-          → Move
-        </button>
-        <div className="text-[10px] text-stone-400 -mt-1 ml-1">
-          {pending.srcPerson} {pending.srcTime} empties
-        </div>
-        <button
-          onClick={handleClose}
-          className="w-full bg-stone-50 text-stone-400 px-3 py-2 rounded-lg text-xs font-medium hover:bg-stone-100 transition-colors mt-1"
-          style={{ touchAction: 'manipulation', minHeight: 44 }}
-        >
-          Cancel
-        </button>
-      </div>
+      {header}
+      {buttons}
     </div>
   );
 }
