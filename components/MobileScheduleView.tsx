@@ -31,6 +31,11 @@ const TYPE_LABELS: Record<ActivityType, string> = {
   routine: 'Routine', meal: 'Meal', personal: 'Personal', work: 'Work',
   family: 'Family', school: 'School', activity: 'Activity', break: 'Break', other: 'Other',
 };
+// Richer colors for mobile — pastels read as white on small screens
+const MOBILE_COLORS: Record<ActivityType, string> = {
+  routine: '#81c784', meal: '#ffd54f', personal: '#64b5f6', work: '#9575cd',
+  family: '#ffb74d', school: '#4db6ac', activity: '#f06292', break: '#e0e0e0', other: '#e8e8e8',
+};
 
 interface MobileScheduleViewProps {
   schedule: Schedule;
@@ -303,6 +308,11 @@ export default function MobileScheduleView({
       e.preventDefault();
     }
 
+    function onContextMenu(e: Event) { e.preventDefault(); }
+    function onSelectStart(e: Event) { e.preventDefault(); }
+
+    listEl.addEventListener('contextmenu', onContextMenu);
+    listEl.addEventListener('selectstart', onSelectStart);
     listEl.addEventListener('pointerdown', onPointerDown);
     listEl.addEventListener('pointermove', onPointerMove);
     listEl.addEventListener('pointerup', onPointerUp);
@@ -311,6 +321,8 @@ export default function MobileScheduleView({
 
     return () => {
       cleanup();
+      listEl.removeEventListener('contextmenu', onContextMenu);
+      listEl.removeEventListener('selectstart', onSelectStart);
       listEl.removeEventListener('pointerdown', onPointerDown);
       listEl.removeEventListener('pointermove', onPointerMove);
       listEl.removeEventListener('pointerup', onPointerUp);
@@ -437,7 +449,7 @@ export default function MobileScheduleView({
           // Skip slots that are part of a multi-hour activity (not the start)
           if (activity && !isSlotStart(slot, activity)) return null;
 
-          const typeColor = activity ? ACTIVITY_COLORS[activity.type] || '#ffffff' : null;
+          const typeColor = activity ? MOBILE_COLORS[activity.type] || '#e8e8e8' : null;
           const personBorder = PERSON_COLORS[selectedPerson]?.border || '#d1d5db';
 
           return (
@@ -445,14 +457,14 @@ export default function MobileScheduleView({
               key={slot}
               data-slot={slot}
               className={`flex items-stretch border-b border-stone-100 ${
-                isCurrent ? 'bg-orange-50' : isPast ? 'opacity-55' : ''
+                isCurrent ? 'bg-orange-50' : isPast ? 'opacity-75' : ''
               }`}
               style={{ minHeight: 48 }}
             >
               {/* Time label */}
               <div
                 className={`w-12 flex-shrink-0 flex flex-col items-center justify-center text-xs font-semibold pr-2 ${
-                  isCurrent ? 'text-orange-600' : 'text-stone-400'
+                  isCurrent ? 'text-orange-600' : isPast ? 'text-stone-400' : 'text-stone-600'
                 }`}
               >
                 <span>{formatTimeDisplay(slot).replace(':00', '').replace(' ', '').toLowerCase()}</span>
@@ -470,8 +482,10 @@ export default function MobileScheduleView({
                     backgroundColor: typeColor || '#fff',
                     borderLeft: `3px solid ${personBorder}`,
                     minHeight: 48,
-                    ...(activity.completed ? { opacity: 0.65 } : {}),
+                    userSelect: 'none',
+                    WebkitUserSelect: 'none',
                   }}
+                  onContextMenu={(e) => e.preventDefault()}
                   onClick={() => {
                     if (justDraggedRef.current) return;
                     const idx = schedule.activities.indexOf(activity);
@@ -500,7 +514,7 @@ export default function MobileScheduleView({
                   <span className={`text-sm font-medium leading-tight flex-1 ${activity.completed ? 'line-through text-stone-500' : ''}`}>
                     {activity.title}
                   </span>
-                  <span className="text-[10px] text-stone-400 flex-shrink-0">
+                  <span className="text-[10px] text-stone-600 flex-shrink-0">
                     {formatTimeDisplay(activity.start).replace(':00 ', '')}-{formatTimeDisplay(activity.end).replace(':00 ', '')}
                   </span>
                 </div>
@@ -645,7 +659,7 @@ function MobileEditSheet({
       start,
       end,
       type,
-      color: ACTIVITY_COLORS[type],
+      color: MOBILE_COLORS[type],
       people: selectedPeople,
       notes,
     });
@@ -715,7 +729,7 @@ function MobileEditSheet({
         <div className="mb-3">
           <label className="block text-[11px] font-semibold tracking-wider uppercase text-stone-400 mb-1">Type</label>
           <div className="flex gap-1.5 overflow-x-auto pb-1">
-            {(Object.entries(ACTIVITY_COLORS) as [ActivityType, string][]).map(([t, color]) => (
+            {(Object.entries(MOBILE_COLORS) as [ActivityType, string][]).map(([t, color]) => (
               <button
                 key={t}
                 onClick={() => setType(t)}
