@@ -1,7 +1,7 @@
 // components/MobileScheduleView.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Schedule,
   Activity,
@@ -14,6 +14,7 @@ import {
   formatTimeDisplay,
 } from '@/lib/time';
 import BottomSheet from './BottomSheet';
+import DropModal, { PendingDrop } from './DropModal';
 
 const PEOPLE = ['Jason', 'Kay', 'Emma', 'Toby'];
 const PERSON_COLORS: Record<string, { bg: string; border: string; dot: string }> = {
@@ -75,11 +76,290 @@ export default function MobileScheduleView({
     defaults: { start: string; end: string; person: string } | null;
   }>({ active: false, activityIndex: -1, isNew: false, defaults: null });
   const [moreMenu, setMoreMenu] = useState(false);
+  const [pendingDrop, setPendingDrop] = useState<PendingDrop | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const justDraggedRef = useRef(false);
+
+  // Refs for drag effect — avoids re-running effect on data changes
+  const scheduleRef = useRef(schedule);
+  scheduleRef.current = schedule;
+  const selectedPersonRef = useRef(selectedPerson);
+  selectedPersonRef.current = selectedPerson;
+  const onActivityUpdateRef = useRef(onActivityUpdate);
+  onActivityUpdateRef.current = onActivityUpdate;
+  const onActivityAddRef = useRef(onActivityAdd);
+  onActivityAddRef.current = onActivityAdd;
+
+  // Drag-and-drop effect
+  useEffect(() => {
+    const listEl = listRef.current;
+    if (!listEl) return;
+
+    const HOLD_MS = 150;
+    const MOVE_PX = 10;
+    const GHOST_OFFSET_Y = 70;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let dragging = false;
+    let activePointerId = -1;
+    let sourceEl: HTMLElement | null = null;
+    let sourceActivity: Activity | null = null;
+    let sourceIndex = -1;
+    let ghost: HTMLDivElement | null = null;
+    let startX = 0;
+    let startY = 0;
+    let hoveredEl: HTMLElement | null = null;
+
+    function closestSlotRow(el: Element | null): HTMLElement | null {
+      let node: Element | null = el;
+      while (node && node !== listEl) {
+        if ((node as HTMLElement).dataset.slot) return node as HTMLElement;
+        node = node.parentElement;
+      }
+      return null;
+    }
+
+    function findActivityCard(el: Element | null): HTMLElement | null {
+      let node: Element | null = el;
+      while (node && node !== listEl) {
+        if ((node as HTMLElement).dataset.activityIdx !== undefined) return node as HTMLElement;
+        node = node.parentElement;
+      }
+      return null;
+    }
+
+    function createGhost(title: string) {
+      ghost = document.createElement('div');
+      ghost.textContent = title;
+      Object.assign(ghost.style, {
+        position: 'fixed',
+        left: '16px',
+        top: `${startY - GHOST_OFFSET_Y}px`,
+        width: `${window.innerWidth - 32}px`,
+        height: '48px',
+        zIndex: '9999',
+        pointerEvents: 'none',
+        padding: '8px 16px',
+        borderRadius: '8px',
+        backgroundColor: '#fff',
+        color: '#1c1917',
+        fontSize: '14px',
+        fontWeight: '600',
+        boxShadow: '0 8px 25px rgba(0,0,0,0.18)',
+        whiteSpace: 'nowrap',
+        opacity: '0.92',
+        willChange: 'transform',
+        display: 'flex',
+        alignItems: 'center',
+        borderLeft: `4px solid ${PERSON_COLORS[selectedPersonRef.current]?.border || '#78716c'}`,
+      });
+      document.body.appendChild(ghost);
+    }
+
+    function moveGhost(cx: number, cy: number) {
+      if (!ghost) return;
+      ghost.style.transform = `translate3d(${cx - startX}px, ${cy - startY - GHOST_OFFSET_Y}px, 0)`;
+    }
+
+    function highlightTarget(cx: number, cy: number) {
+      if (hoveredEl) {
+        hoveredEl.style.outline = '';
+        hoveredEl = null;
+      }
+      if (!ghost) return;
+      ghost.style.display = 'none';
+      const el = document.elementFromPoint(cx, cy);
+      ghost.style.display = '';
+      const row = closestSlotRow(el);
+      if (row && row !== sourceEl) {
+        row.style.outline = '2px solid #60a5fa';
+        hoveredEl = row;
+      }
+    }
+
+    function cleanup() {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (ghost) { ghost.remove(); ghost = null; }
+      if (sourceEl) {
+        sourceEl.style.opacity = '';
+        sourceEl.style.outline = '';
+      }
+      if (hoveredEl) {
+        hoveredEl.style.outline = '';
+        hoveredEl = null;
+      }
+      dragging = false;
+      activePointerId = -1;
+      sourceEl = null;
+      sourceActivity = null;
+      sourceIndex = -1;
+    }
+
+    function doDrop(cx: number, cy: number) {
+      if (!ghost) return;
+      ghost.style.display = 'none';
+      const el = document.elementFromPoint(cx, cy);
+      ghost.style.display = '';
+      const destRow = closestSlotRow(el);
+      if (!destRow || !destRow.dataset.slot || destRow === sourceEl) return;
+      if (!sourceActivity) return;
+
+      const destSlot = destRow.dataset.slot;
+      const person = selectedPersonRef.current;
+      const srcDuration = timeToMinutes(sourceActivity.end) - timeToMinutes(sourceActivity.start);
+      const destEndTime = minutesToTime(timeToMinutes(destSlot) + srcDuration);
+
+      // Check for existing activity at destination
+      const destActivity = personActivitiesRef.current.find(a => {
+        const s = timeToMinutes(a.start);
+        const e = timeToMinutes(a.end);
+        const d = timeToMinutes(destSlot);
+        return d >= s && d < e;
+      }) || null;
+
+      if (navigator.vibrate) navigator.vibrate(30);
+
+      if (!destActivity) {
+        // Empty slot — direct move
+        onActivityUpdateRef.current(sourceIndex, { start: destSlot, end: destEndTime });
+      } else {
+        // Occupied — show drop modal
+        setPendingDrop({
+          srcActivity: sourceActivity,
+          srcPerson: person,
+          srcTime: sourceActivity.start,
+          destActivity,
+          destPerson: person,
+          destTime: destSlot,
+          destEndTime,
+          dropPosition: { x: window.innerWidth / 2, y: 100 },
+        });
+      }
+    }
+
+    function onPointerDown(e: PointerEvent) {
+      if (activePointerId !== -1) return;
+      const card = findActivityCard(e.target as Element);
+      if (!card) return;
+      const idx = parseInt(card.dataset.activityIdx || '-1', 10);
+      if (idx < 0) return;
+      const act = scheduleRef.current.activities[idx];
+      if (!act) return;
+      const row = closestSlotRow(card);
+      if (!row) return;
+
+      startX = e.clientX;
+      startY = e.clientY;
+      sourceEl = row;
+      sourceActivity = act;
+      sourceIndex = idx;
+      activePointerId = e.pointerId;
+
+      const pointerId = e.pointerId;
+      timer = setTimeout(() => {
+        if (!sourceEl) return;
+        timer = null;
+        dragging = true;
+        if (navigator.vibrate) navigator.vibrate(50);
+        sourceEl.style.opacity = '0.35';
+        sourceEl.style.outline = '2px dashed #999';
+        createGhost(act.title);
+        moveGhost(startX, startY);
+      }, HOLD_MS);
+    }
+
+    function onPointerMove(e: PointerEvent) {
+      if (e.pointerId !== activePointerId) return;
+      if (timer && !dragging) {
+        const dx = e.clientX - startX;
+        const dy = e.clientY - startY;
+        if (Math.sqrt(dx * dx + dy * dy) > MOVE_PX) {
+          clearTimeout(timer);
+          timer = null;
+          cleanup();
+        }
+        return;
+      }
+      if (!dragging) return;
+      moveGhost(e.clientX, e.clientY);
+      highlightTarget(e.clientX, e.clientY);
+    }
+
+    function onPointerUp(e: PointerEvent) {
+      if (e.pointerId !== activePointerId && !dragging) { cleanup(); return; }
+      if (!dragging) { cleanup(); return; }
+      doDrop(e.clientX, e.clientY);
+      cleanup();
+      justDraggedRef.current = true;
+      setTimeout(() => { justDraggedRef.current = false; }, 300);
+    }
+
+    function onPointerCancel() { cleanup(); }
+
+    function onTouchMove(e: TouchEvent) {
+      if (!dragging) return;
+      e.preventDefault();
+    }
+
+    listEl.addEventListener('pointerdown', onPointerDown);
+    listEl.addEventListener('pointermove', onPointerMove);
+    listEl.addEventListener('pointerup', onPointerUp);
+    listEl.addEventListener('pointercancel', onPointerCancel);
+    document.addEventListener('touchmove', onTouchMove, { passive: false });
+
+    return () => {
+      cleanup();
+      listEl.removeEventListener('pointerdown', onPointerDown);
+      listEl.removeEventListener('pointermove', onPointerMove);
+      listEl.removeEventListener('pointerup', onPointerUp);
+      listEl.removeEventListener('pointercancel', onPointerCancel);
+      document.removeEventListener('touchmove', onTouchMove);
+    };
+  }, []);
+
+  // Drop operations
+  function executeSwap() {
+    if (!pendingDrop) return;
+    const srcIdx = schedule.activities.findIndex(a => a.id === pendingDrop.srcActivity.id);
+    const destIdx = schedule.activities.findIndex(a => a.id === pendingDrop.destActivity!.id);
+    if (srcIdx < 0 || destIdx < 0) return;
+    const srcDur = timeToMinutes(pendingDrop.srcActivity.end) - timeToMinutes(pendingDrop.srcActivity.start);
+    const destDur = timeToMinutes(pendingDrop.destActivity!.end) - timeToMinutes(pendingDrop.destActivity!.start);
+    onActivityUpdate(srcIdx, { start: pendingDrop.destTime, end: minutesToTime(timeToMinutes(pendingDrop.destTime) + srcDur) });
+    onActivityUpdate(destIdx, { start: pendingDrop.srcTime, end: minutesToTime(timeToMinutes(pendingDrop.srcTime) + destDur) });
+    setPendingDrop(null);
+  }
+
+  function executeCopy() {
+    if (!pendingDrop) return;
+    onActivityAdd(pendingDrop.destTime, pendingDrop.destEndTime, pendingDrop.destPerson);
+    const newIdx = schedule.activities.length;
+    setTimeout(() => {
+      onActivityUpdate(newIdx, {
+        title: pendingDrop!.srcActivity.title,
+        type: pendingDrop!.srcActivity.type,
+        color: pendingDrop!.srcActivity.color,
+        people: [pendingDrop!.destPerson],
+        notes: pendingDrop!.srcActivity.notes,
+      });
+    }, 50);
+    setPendingDrop(null);
+  }
+
+  function executeMove() {
+    if (!pendingDrop) return;
+    const srcIdx = schedule.activities.findIndex(a => a.id === pendingDrop.srcActivity.id);
+    if (srcIdx < 0) return;
+    onActivityUpdate(srcIdx, { start: pendingDrop.destTime, end: pendingDrop.destEndTime });
+    setPendingDrop(null);
+  }
 
   // Get activities for the selected person
   const personActivities = schedule.activities.filter(
     (a) => a.people.includes(selectedPerson)
   );
+  const personActivitiesRef = useRef(personActivities);
+  personActivitiesRef.current = personActivities;
 
   // Find activity at a given time slot
   function getActivityAtSlot(slot: string): Activity | null {
@@ -143,7 +423,7 @@ export default function MobileScheduleView({
       </div>
 
       {/* Schedule list — scrollable */}
-      <div className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <div ref={listRef} className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
         {TIME_SLOTS.map((slot) => {
           const slotMins = timeToMinutes(slot);
           const activity = getActivityAtSlot(slot);
@@ -159,8 +439,9 @@ export default function MobileScheduleView({
           return (
             <div
               key={slot}
+              data-slot={slot}
               className={`flex items-stretch border-b border-stone-100 ${
-                isCurrent ? 'bg-orange-50' : isPast ? 'opacity-40' : ''
+                isCurrent ? 'bg-orange-50' : isPast ? 'opacity-55' : ''
               }`}
               style={{ minHeight: 48 }}
             >
@@ -179,13 +460,16 @@ export default function MobileScheduleView({
               {/* Activity card or empty slot */}
               {activity ? (
                 <div
+                  data-activity-idx={schedule.activities.indexOf(activity)}
                   className="flex-1 flex items-center gap-2 px-3 py-2 cursor-pointer"
                   style={{
-                    backgroundColor: activity.completed ? '#f5f5f4' : typeColor || '#fff',
+                    backgroundColor: typeColor || '#fff',
                     borderLeft: `3px solid ${personBorder}`,
                     minHeight: 48,
+                    ...(activity.completed ? { opacity: 0.65 } : {}),
                   }}
                   onClick={() => {
+                    if (justDraggedRef.current) return;
                     const idx = schedule.activities.indexOf(activity);
                     setEditState({ active: true, activityIndex: idx, isNew: false, defaults: null });
                   }}
@@ -209,7 +493,7 @@ export default function MobileScheduleView({
                       </svg>
                     )}
                   </button>
-                  <span className={`text-sm font-medium leading-tight flex-1 ${activity.completed ? 'line-through text-stone-400' : ''}`}>
+                  <span className={`text-sm font-medium leading-tight flex-1 ${activity.completed ? 'line-through text-stone-500' : ''}`}>
                     {activity.title}
                   </span>
                   <span className="text-[10px] text-stone-400 flex-shrink-0">
@@ -296,6 +580,18 @@ export default function MobileScheduleView({
           onRemove={onActivityRemove}
           onClose={() => setEditState({ active: false, activityIndex: -1, isNew: false, defaults: null })}
           selectedPerson={selectedPerson}
+        />
+      )}
+
+      {/* Drop modal for occupied-slot drops */}
+      {pendingDrop && (
+        <DropModal
+          pending={pendingDrop}
+          allActivities={schedule.activities}
+          onSwap={executeSwap}
+          onCopy={executeCopy}
+          onMove={executeMove}
+          onClose={() => setPendingDrop(null)}
         />
       )}
     </div>
