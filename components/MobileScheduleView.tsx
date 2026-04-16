@@ -36,6 +36,10 @@ const MOBILE_COLORS: Record<ActivityType, string> = {
   routine: '#81c784', meal: '#ffd54f', personal: '#64b5f6', work: '#9575cd',
   family: '#ffb74d', school: '#4db6ac', activity: '#f06292', break: '#e0e0e0', other: '#e8e8e8',
 };
+const MOBILE_TEXT_COLORS: Record<ActivityType, string> = {
+  routine: '#1b5e20', meal: '#e65100', personal: '#0d47a1', work: '#4a148c',
+  family: '#bf360c', school: '#004d40', activity: '#880e4f', break: '#424242', other: '#212121',
+};
 
 interface MobileScheduleViewProps {
   schedule: Schedule;
@@ -480,6 +484,7 @@ export default function MobileScheduleView({
                   className="flex-1 flex items-center gap-2 px-3 py-2 cursor-pointer"
                   style={{
                     backgroundColor: typeColor || '#fff',
+                    color: activity.completed ? '#78716c' : (MOBILE_TEXT_COLORS[activity.type] || '#212121'),
                     borderLeft: `3px solid ${personBorder}`,
                     minHeight: 48,
                     userSelect: 'none',
@@ -511,7 +516,7 @@ export default function MobileScheduleView({
                       </svg>
                     )}
                   </button>
-                  <span className={`text-sm font-medium leading-tight flex-1 ${activity.completed ? 'line-through text-stone-500' : ''}`}>
+                  <span className={`text-sm font-medium leading-tight flex-1 ${activity.completed ? 'line-through opacity-60' : ''}`}>
                     {activity.title}
                   </span>
                   <span className="text-[10px] text-stone-600 flex-shrink-0">
