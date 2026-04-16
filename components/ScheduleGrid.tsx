@@ -564,14 +564,14 @@ export default function ScheduleGrid({
           touchAction: 'pan-y',
         }}
       >
-        <table className="w-full border-collapse">
+        <table className="w-full border-collapse md:min-w-[540px]">
           <thead>
             <tr className="sticky top-0 z-10">
-              <th className="bg-stone-800 text-stone-300 px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase w-28 sticky top-0">
+              <th className="bg-stone-800 text-stone-300 px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase w-28 md:w-20 sticky top-0">
                 Time
               </th>
               {PEOPLE.map(person => (
-                <th key={person} className="px-3 py-3 text-center text-sm font-semibold tracking-wider uppercase sticky top-0"
+                <th key={person} className="px-3 py-3 md:py-2 text-center text-sm md:text-[10px] font-semibold tracking-wider uppercase sticky top-0"
                   style={{ backgroundColor: PERSON_COLORS[person].bg, color: PERSON_COLORS[person].dot }}>
                   {person}
                 </th>
@@ -591,7 +591,10 @@ export default function ScheduleGrid({
                     rowIdx % 2 === 1 ? 'bg-stone-50/50' : ''
                   }`}
                 >
-                  <td className={`px-3 py-3 text-center text-sm font-semibold align-middle whitespace-nowrap ${isCurrent ? 'text-orange-600' : 'text-stone-400'}`}>
+                  <td
+                    className={`px-3 py-3 md:w-20 text-center text-sm font-semibold align-middle whitespace-nowrap ${isCurrent ? 'text-orange-600' : 'text-stone-400'}`}
+                    style={{ position: 'sticky', left: 0, zIndex: 5, backgroundColor: isCurrent ? '#fff7ed' : rowIdx % 2 === 1 ? '#fafaf9' : '#ffffff' }}
+                  >
                     <div>
                       {formatTimeDisplay(row.start).replace(':00', '').replace(' ', '').toLowerCase()}
                       <span className="text-stone-300 mx-0.5">-</span>
@@ -683,7 +686,7 @@ export default function ScheduleGrid({
                                 const rect = (e.currentTarget.closest('td') as HTMLElement).getBoundingClientRect();
                                 setShiftMenu({ activity, person, position: { x: rect.left, y: rect.top } });
                               }}
-                              className="ml-auto opacity-40 hover:opacity-100 text-stone-400 hover:text-orange-500 touch-show transition-opacity"
+                              className="ml-auto hidden lg:flex opacity-40 hover:opacity-100 text-stone-400 hover:text-orange-500 touch-show transition-opacity"
                               title="Shift times"
                               style={{ touchAction: 'manipulation', pointerEvents: 'auto', minWidth: 44, minHeight: 44, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
