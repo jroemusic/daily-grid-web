@@ -7,6 +7,8 @@ import { getDayName, getTodayDate } from '@/lib/time';
 import { formatDate, openPrintableView } from '@/lib/pdf';
 import { useAutoSave } from '@/lib/useAutoSave';
 import ScheduleGrid from '@/components/ScheduleGrid';
+import { useIsMobile, useLastPerson } from '@/lib/hooks';
+import MobileScheduleView from '@/components/MobileScheduleView';
 import * as Switch from '@radix-ui/react-switch';
 
 export default function EditorPage({ params }: { params: Promise<{ date: string }> }) {
@@ -21,6 +23,8 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
   const [countdown, setCountdown] = useState('');
   const undoStack = useRef<Activity[][]>([]);
   const [canUndo, setCanUndo] = useState(false);
+  const isMobile = useIsMobile();
+  const [lastPerson, setLastPerson] = useLastPerson();
 
   // currentTimeForGrid — only updates when the minute changes (not every second)
   const [currentTimeForGrid, setCurrentTimeForGrid] = useState('');
@@ -429,11 +433,11 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
               {dayName} <span className="text-stone-400 font-normal mx-1">&mdash;</span> <span className="text-stone-500">{displayDate}</span>
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 hidden md:flex">
             <span className="text-lg font-bold text-stone-800 tabular-nums">{currentTime}</span>
             <span className="text-xs font-semibold text-stone-400 tabular-nums bg-stone-100 px-2 py-0.5 rounded-full">{countdown}</span>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 hidden md:flex">
             <button
               onClick={handleUndo}
               disabled={!canUndo}
@@ -472,21 +476,42 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
         </div>
       </div>
 
-      {/* Schedule grid — fills remaining viewport */}
-      <main className="max-w-6xl mx-auto px-4 py-3 flex-1 overflow-hidden">
-        <ScheduleGrid
-          schedule={schedule}
-          currentTime={currentTimeForGrid}
-          onActivityUpdate={handleActivityUpdate}
-          onActivitiesUpdate={handleActivitiesUpdate}
-          onActivityAdd={handleActivityAdd}
-          onActivityCreate={handleActivityCreate}
-          onActivityRemove={handleActivityRemove}
-          onToggleComplete={handleToggleComplete}
-          onCalendarEventOverride={handleCalendarEventOverride}
-          editMode={editMode}
-          triggerNewActivity={triggerNewActivity}
-        />
+      {/* Schedule — mobile or desktop */}
+      <main className={`${isMobile ? '' : 'max-w-6xl mx-auto px-4 py-3'} flex-1 overflow-hidden`}>
+        {isMobile ? (
+          <MobileScheduleView
+            schedule={schedule}
+            currentTime={currentTimeForGrid}
+            onActivityUpdate={handleActivityUpdate}
+            onActivityAdd={handleActivityAdd}
+            onActivityRemove={handleActivityRemove}
+            onToggleComplete={handleToggleComplete}
+            selectedPerson={lastPerson}
+            onPersonChange={setLastPerson}
+            onUndo={handleUndo}
+            canUndo={canUndo}
+            onAddActivity={() => setTriggerNewActivity((n) => n + 1)}
+            templates={templates}
+            onLoadTemplate={loadTemplate}
+            onRefreshCalendar={refreshCalendar}
+            onPrint={() => openPrintableView(schedule)}
+            onSaveAsTemplate={() => setShowSaveTemplate(true)}
+          />
+        ) : (
+          <ScheduleGrid
+            schedule={schedule}
+            currentTime={currentTimeForGrid}
+            onActivityUpdate={handleActivityUpdate}
+            onActivitiesUpdate={handleActivitiesUpdate}
+            onActivityAdd={handleActivityAdd}
+            onActivityCreate={handleActivityCreate}
+            onActivityRemove={handleActivityRemove}
+            onToggleComplete={handleToggleComplete}
+            onCalendarEventOverride={handleCalendarEventOverride}
+            editMode={editMode}
+            triggerNewActivity={triggerNewActivity}
+          />
+        )}
       </main>
 
       {/* Calendar strip — fixed height, scrollable, pinned to bottom */}
