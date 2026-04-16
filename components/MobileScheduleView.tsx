@@ -427,7 +427,7 @@ export default function MobileScheduleView({
       </div>
 
       {/* Schedule list — scrollable */}
-      <div ref={listRef} className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y' }}>
+      <div ref={listRef} className="flex-1 overflow-y-auto" style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', userSelect: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties}>
         {TIME_SLOTS.map((slot) => {
           const slotMins = timeToMinutes(slot);
           const activity = getActivityAtSlot(slot);
