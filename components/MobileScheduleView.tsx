@@ -36,6 +36,7 @@ interface MobileScheduleViewProps {
   schedule: Schedule;
   currentTime: string;
   onActivityUpdate: (index: number, updates: Partial<Activity>) => void;
+  onActivitiesUpdate: (updates: { index: number; updates: Partial<Activity> }[]) => void;
   onActivityAdd: (start: string, end: string, person: string) => void;
   onActivityRemove: (index: number) => void;
   onToggleComplete: (index: number) => void;
@@ -55,6 +56,7 @@ export default function MobileScheduleView({
   schedule,
   currentTime,
   onActivityUpdate,
+  onActivitiesUpdate,
   onActivityAdd,
   onActivityRemove,
   onToggleComplete,
@@ -163,7 +165,7 @@ export default function MobileScheduleView({
 
     function highlightTarget(cx: number, cy: number) {
       if (hoveredEl) {
-        hoveredEl.style.outline = '';
+        hoveredEl.style.boxShadow = '';
         hoveredEl = null;
       }
       if (!ghost) return;
@@ -172,7 +174,7 @@ export default function MobileScheduleView({
       ghost.style.display = '';
       const row = closestSlotRow(el);
       if (row && row !== sourceEl) {
-        row.style.outline = '2px solid #60a5fa';
+        row.style.boxShadow = 'inset 0 0 0 2px #60a5fa';
         hoveredEl = row;
       }
     }
@@ -182,10 +184,10 @@ export default function MobileScheduleView({
       if (ghost) { ghost.remove(); ghost = null; }
       if (sourceEl) {
         sourceEl.style.opacity = '';
-        sourceEl.style.outline = '';
+        sourceEl.style.boxShadow = '';
       }
       if (hoveredEl) {
-        hoveredEl.style.outline = '';
+        hoveredEl.style.boxShadow = '';
         hoveredEl = null;
       }
       dragging = false;
@@ -262,7 +264,7 @@ export default function MobileScheduleView({
         dragging = true;
         if (navigator.vibrate) navigator.vibrate(50);
         sourceEl.style.opacity = '0.35';
-        sourceEl.style.outline = '2px dashed #999';
+        sourceEl.style.boxShadow = 'inset 0 0 0 2px #999';
         createGhost(act.title);
         moveGhost(startX, startY);
       }, HOLD_MS);
@@ -325,8 +327,10 @@ export default function MobileScheduleView({
     if (srcIdx < 0 || destIdx < 0) return;
     const srcDur = timeToMinutes(pendingDrop.srcActivity.end) - timeToMinutes(pendingDrop.srcActivity.start);
     const destDur = timeToMinutes(pendingDrop.destActivity!.end) - timeToMinutes(pendingDrop.destActivity!.start);
-    onActivityUpdate(srcIdx, { start: pendingDrop.destTime, end: minutesToTime(timeToMinutes(pendingDrop.destTime) + srcDur) });
-    onActivityUpdate(destIdx, { start: pendingDrop.srcTime, end: minutesToTime(timeToMinutes(pendingDrop.srcTime) + destDur) });
+    onActivitiesUpdate([
+      { index: srcIdx, updates: { start: pendingDrop.destTime, end: minutesToTime(timeToMinutes(pendingDrop.destTime) + srcDur) } },
+      { index: destIdx, updates: { start: pendingDrop.srcTime, end: minutesToTime(timeToMinutes(pendingDrop.srcTime) + destDur) } },
+    ]);
     setPendingDrop(null);
   }
 

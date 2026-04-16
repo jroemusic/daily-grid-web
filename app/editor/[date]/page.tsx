@@ -483,6 +483,7 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
             schedule={schedule}
             currentTime={currentTimeForGrid}
             onActivityUpdate={handleActivityUpdate}
+            onActivitiesUpdate={handleActivitiesUpdate}
             onActivityAdd={handleActivityAdd}
             onActivityRemove={handleActivityRemove}
             onToggleComplete={handleToggleComplete}
