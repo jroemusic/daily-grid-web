@@ -432,6 +432,9 @@ export default function EditorPage({ params }: { params: Promise<{ date: string 
             <h1 className="text-sm font-bold text-stone-800 tracking-tight">
               {dayName} <span className="text-stone-400 font-normal mx-1">&mdash;</span> <span className="text-stone-500">{displayDate}</span>
             </h1>
+            {resolvedParams.date !== getTodayDate() && (
+              <Link href={`/editor/${getTodayDate()}`} className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-xs font-bold tracking-wide hover:bg-blue-700 transition-colors" style={{ touchAction: 'manipulation', minHeight: 36 }}>TODAY</Link>
+            )}
           </div>
           <div className="flex items-center gap-4 hidden md:flex">
             <span className="text-lg font-bold text-stone-800 tabular-nums">{currentTime}</span>
